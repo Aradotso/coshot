@@ -18,6 +18,11 @@ import ScreenCaptureKit
 enum PermissionGate {
     static var hasScreenRecording: Bool { CGPreflightScreenCaptureAccess() }
     static var hasAccessibility: Bool { AXIsProcessTrusted() }
+    static var hasApiKey: Bool {
+        if let k = Keychain.load(), !k.isEmpty { return true }
+        if let k = ProcessInfo.processInfo.environment["COSHOT_CEREBRAS_KEY"], !k.isEmpty { return true }
+        return false
+    }
 
     /// Reentrancy guards — a single permission grant should trigger one
     /// relaunch, not a thundering herd of alerts.

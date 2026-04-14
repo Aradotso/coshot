@@ -57,9 +57,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startListening() {
         Log.listen.info("startListening — ax_granted=\(PermissionGate.hasAccessibility, privacy: .public) sc_granted=\(PermissionGate.hasScreenRecording, privacy: .public)")
-        listening = true
+
+        // CGEventTap requires Accessibility. If it's not granted we can't
+        // listen for letter keys — trigger the system prompt + open Settings
+        // and bail instead of lighting the green dot misleadingly.
+        if !PermissionGate.hasAccessibility {
+            Log.listen.error("Accessibility not granted, cannot start listen mode")
+            _ = AXIsProcessTrustedWithOptions([
+                "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
+            ] as CFDictionary)
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+            NSWorkspace.shared.open(url)
+            return
+        }
+
         listenTap.start()
         Log.listen.info("after tap.start() isActive=\(self.listenTap.isActive, privacy: .public)")
+
+        // Only flip the listening flag if the tap actually came up.
+        guard listenTap.isActive else {
+            Log.listen.error("tap failed to start — leaving listen mode off")
+            return
+        }
+
+        listening = true
         updateMenuBarIcon()
 
         listenTimeoutTask?.cancel()

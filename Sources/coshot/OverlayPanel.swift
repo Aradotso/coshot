@@ -1,4 +1,7 @@
 import AppKit
+import ApplicationServices
+import CoreGraphics
+import ScreenCaptureKit
 import SwiftUI
 
 final class KeyablePanel: NSPanel {
@@ -12,6 +15,7 @@ final class OverlayController {
     private let state = OverlayState()
     private var streamTask: Task<Void, Never>?
     private var keyMonitor: Any?
+    private var configPollTask: Task<Void, Never>?
 
     // MARK: - Public API
 
@@ -110,21 +114,12 @@ final class OverlayController {
         state.status = capture ? "Capturing…" : "Configure"
 
         if capture {
-            // HOTKEY PATH: orderFrontRegardless shows the panel visually
-            // without making it key and without activating coshot. The
-            // user's target app stays frontmost, so ⌘V landed via
-            // CGEventPost goes where the cursor was. All interaction in
-            // capture mode is mouse-only (single-click = run, double-click
-            // = edit); no keyboard shortcuts, because key events continue
-            // to flow into the target app.
             panel!.orderFrontRegardless()
         } else {
-            // CONFIG PATH: user clicked the Dock / menu bar, so activate
-            // normally. Paste won't work from here (coshot is frontmost)
-            // — that's fine, config mode is for editing prompts and
-            // keyboard shortcuts work here.
             NSApp.activate(ignoringOtherApps: true)
             panel!.makeKeyAndOrderFront(nil)
+            startConfigPolling()
+            requestMissingPermissions()
         }
 
         if capture {
@@ -153,10 +148,76 @@ final class OverlayController {
 
     private func hide() {
         streamTask?.cancel()
+        configPollTask?.cancel()
+        configPollTask = nil
         panel?.orderOut(nil)
-        // No previousApp?.activate() — we never activated in the first place
-        // in capture mode, and in config mode the user can pick their own
-        // next app.
+    }
+
+    // MARK: - Config mode: live permission status
+
+    private func refreshPermissionStatus() {
+        state.hasScreenRecording = PermissionGate.hasScreenRecording
+        state.hasAccessibility   = PermissionGate.hasAccessibility
+        state.hasApiKey          = PermissionGate.hasApiKey
+    }
+
+    private func startConfigPolling() {
+        configPollTask?.cancel()
+        refreshPermissionStatus()
+        configPollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                guard let self = self else { return }
+                self.refreshPermissionStatus()
+            }
+        }
+    }
+
+    private func requestMissingPermissions() {
+        if !PermissionGate.hasScreenRecording {
+            _ = CGRequestScreenCaptureAccess()
+            Task.detached {
+                _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            }
+        }
+        if !PermissionGate.hasAccessibility {
+            _ = AXIsProcessTrustedWithOptions([
+                "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
+            ] as CFDictionary)
+        }
+    }
+
+    // MARK: - Permission fix callbacks (wired from OverlayView)
+
+    private func fixScreenRecording() {
+        _ = CGRequestScreenCaptureAccess()
+        Task.detached {
+            _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        }
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+    }
+
+    private func fixAccessibility() {
+        _ = AXIsProcessTrustedWithOptions([
+            "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
+        ] as CFDictionary)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+
+    private func fixApiKey() {
+        let alert = NSAlert()
+        alert.messageText = "Cerebras API Key"
+        alert.informativeText = "Stored in macOS Keychain. Get a key at cloud.cerebras.ai."
+        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        input.stringValue = Keychain.load() ?? ""
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            Keychain.save(input.stringValue)
+            refreshPermissionStatus()
+        }
     }
 
     // MARK: - Panel construction
@@ -186,7 +247,10 @@ final class OverlayController {
             onRunPrompt:  { [weak self] index in self?.runPromptAt(index) },
             onEditPrompt: { [weak self] index in self?.startEdit(at: index) },
             onSaveEdit:   { [weak self] index in self?.saveEdit(at: index) },
-            onCancelEdit: { [weak self] in self?.cancelEdit() }
+            onCancelEdit: { [weak self] in self?.cancelEdit() },
+            onFixScreenRecording: { [weak self] in self?.fixScreenRecording() },
+            onFixAccessibility:   { [weak self] in self?.fixAccessibility() },
+            onFixApiKey:          { [weak self] in self?.fixApiKey() }
         )
         p.contentView = NSHostingView(rootView: view)
         panel = p

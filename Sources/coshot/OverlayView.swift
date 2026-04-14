@@ -7,6 +7,9 @@ struct OverlayView: View {
     let onEditPrompt: (Int) -> Void
     let onSaveEdit: (Int) -> Void
     let onCancelEdit: () -> Void
+    let onFixScreenRecording: () -> Void
+    let onFixAccessibility: () -> Void
+    let onFixApiKey: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -27,6 +30,17 @@ struct OverlayView: View {
                     onRun:  onRunPrompt,
                     onEdit: onEditPrompt
                 )
+                if state.isConfigMode {
+                    PermissionsPanel(
+                        hasScreenRecording: state.hasScreenRecording,
+                        hasAccessibility: state.hasAccessibility,
+                        hasApiKey: state.hasApiKey,
+                        onFixScreenRecording: onFixScreenRecording,
+                        onFixAccessibility: onFixAccessibility,
+                        onFixApiKey: onFixApiKey
+                    )
+                    .transition(.opacity)
+                }
                 if !state.output.isEmpty || state.isStreaming {
                     outputPane
                         .transition(.opacity)
@@ -227,6 +241,106 @@ struct PromptEditorView: View {
 }
 
 // MARK: - Button styles
+
+// MARK: - Permissions panel (config mode)
+
+struct PermissionsPanel: View {
+    let hasScreenRecording: Bool
+    let hasAccessibility: Bool
+    let hasApiKey: Bool
+    let onFixScreenRecording: () -> Void
+    let onFixAccessibility: () -> Void
+    let onFixApiKey: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PERMISSIONS")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.42))
+
+            VStack(spacing: 6) {
+                PermissionRow(
+                    name: "Screen Recording",
+                    subtitle: "needed to capture your screen for OCR",
+                    granted: hasScreenRecording,
+                    onFix: onFixScreenRecording
+                )
+                PermissionRow(
+                    name: "Accessibility",
+                    subtitle: "needed for ⌥Space listen mode and auto-paste",
+                    granted: hasAccessibility,
+                    onFix: onFixAccessibility
+                )
+                PermissionRow(
+                    name: "Cerebras API Key",
+                    subtitle: "needed to stream responses from Cerebras",
+                    granted: hasApiKey,
+                    onFix: onFixApiKey
+                )
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+        .animation(.easeOut(duration: 0.2), value: hasScreenRecording)
+        .animation(.easeOut(duration: 0.2), value: hasAccessibility)
+        .animation(.easeOut(duration: 0.2), value: hasApiKey)
+    }
+}
+
+struct PermissionRow: View {
+    let name: String
+    let subtitle: String
+    let granted: Bool
+    let onFix: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(granted ? Color.green : Color.red.opacity(0.85))
+                    .frame(width: 10, height: 10)
+                Circle()
+                    .stroke(.black.opacity(0.35), lineWidth: 0.5)
+                    .frame(width: 10, height: 10)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+                Text(subtitle)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.42))
+            }
+
+            Spacer()
+
+            if granted {
+                Text("granted")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.green.opacity(0.85))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(.green.opacity(0.12))
+                    )
+            } else {
+                Button(action: onFix) {
+                    Text("Grant")
+                }
+                .buttonStyle(OrangeButtonStyle())
+            }
+        }
+    }
+}
 
 struct OrangeButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
