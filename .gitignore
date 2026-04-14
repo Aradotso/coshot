@@ -2,6 +2,7 @@
 .swiftpm/
 DerivedData/
 coshot.app/
+coshot.zip
 .env.local
 .DS_Store
 *.xcodeproj

@@ -120,7 +120,8 @@ final class OverlayController {
 
     private func run(_ prompt: Prompt) {
         guard let ocr = state.ocrText, !ocr.isEmpty else {
-            state.status = "Nothing on screen to send"
+            // Don't overwrite the existing status — it already explains why
+            // (still capturing, capture failed, or screen is genuinely empty).
             return
         }
         streamTask?.cancel()
