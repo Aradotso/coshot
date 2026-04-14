@@ -89,6 +89,18 @@ echo "▶ wrapping into .app bundle…"
 ./build-app.sh >/dev/null
 
 # ---------------------------------------------------------------------------
+# Sanitize bundle before signing
+# macOS 14+ writes com.apple.provenance xattrs on every file. ditto then
+# packs those as AppleDouble ._* entries inside the zip, which extract as
+# real files on the install side and invalidate the code-signature seal
+# (→ "coshot is damaged" Gatekeeper warning). Strip them now.
+# ---------------------------------------------------------------------------
+echo "▶ sanitizing bundle (xattrs + AppleDouble)…"
+/usr/bin/xattr -cr coshot.app
+/usr/bin/dot_clean -fm coshot.app 2>/dev/null || true
+/usr/bin/find coshot.app -name '._*' -delete 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
 # Sign with Developer ID + hardened runtime
 # ---------------------------------------------------------------------------
 echo "▶ signing with '$APPLE_CODESIGN_DEVELOPER_ID_IDENTITY'…"
@@ -104,7 +116,7 @@ spctl --assess --verbose=2 --type execute coshot.app || true
 # ---------------------------------------------------------------------------
 echo "▶ zipping…"
 rm -f coshot.zip
-ditto -c -k --keepParent coshot.app coshot.zip
+/usr/bin/zip -qry coshot.zip coshot.app
 
 if [ "${SKIP_NOTARIZE:-0}" = "1" ]; then
   echo "⚠ SKIP_NOTARIZE=1 — shipping signed-only build"
@@ -120,7 +132,7 @@ else
     xcrun stapler staple coshot.app
     xcrun stapler validate coshot.app
     rm coshot.zip
-    ditto -c -k --keepParent coshot.app coshot.zip
+    /usr/bin/zip -qry coshot.zip coshot.app
   else
     echo ""
     echo "⚠ notarization failed — shipping signed-only build"

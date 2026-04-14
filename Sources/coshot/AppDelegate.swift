@@ -20,11 +20,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Set Cerebras API Key…", action: #selector(setKey), keyEquivalent: "")
         menu.addItem(withTitle: "Open Prompts File", action: #selector(openPrompts), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        menu.addItem(withTitle: "coshot v\(versionString)", action: nil, keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Quit coshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
         hotkey = HotkeyMonitor { [weak self] in self?.overlay.toggle() }
         hotkey.register(keyCode: UInt32(kVK_Space), modifiers: [.option])
+
+        // Poll every 60s for new releases. The loop runs forever in the background.
+        UpdateChecker.shared.startPolling()
+    }
+
+    private var versionString: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+    }
+
+    @objc func checkForUpdates() {
+        UpdateChecker.shared.checkNow()
     }
 
     @objc func show() { overlay.toggle() }
