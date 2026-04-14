@@ -18,10 +18,12 @@ enum Capture {
     /// Captures the main display (excluding coshot's own windows) and runs Vision OCR.
     /// Target latency on an M-series Mac: ~60-120ms for capture + ~40-80ms for OCR.
     static func captureAndOCR() async throws -> String {
+        Log.capture.info("captureAndOCR: fetching SCShareableContent")
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: true
         )
+        Log.capture.info("got \(content.displays.count, privacy: .public) displays, \(content.applications.count, privacy: .public) apps")
 
         guard let display = content.displays.first else {
             throw CaptureError.noDisplay
@@ -42,12 +44,16 @@ enum Capture {
         config.capturesAudio = false
         config.showsCursor = false
 
+        Log.capture.info("calling SCScreenshotManager.captureImage")
         let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,
             configuration: config
         )
+        Log.capture.info("captured \(cgImage.width, privacy: .public)x\(cgImage.height, privacy: .public), running Vision OCR")
 
-        return try await runOCR(cgImage)
+        let text = try await runOCR(cgImage)
+        Log.capture.info("OCR done: \(text.count, privacy: .public) chars")
+        return text
     }
 
     private static func runOCR(_ image: CGImage) async throws -> String {

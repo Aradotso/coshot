@@ -28,27 +28,38 @@ final class OverlayController {
     /// background; the user's cursor is still in their target app so
     /// CGEventPost ⌘V lands there.
     func fireListenedPrompt(_ letter: Character) {
+        Log.fire.info("fireListenedPrompt letter=\(String(letter), privacy: .public)")
+
         let lib = PromptLibrary.load()
         let key = String(letter).lowercased()
         guard let prompt = lib.prompts.first(where: { $0.key.lowercased() == key }) else {
-            NSLog("coshot: no prompt mapped to \(letter)")
+            Log.fire.error("no prompt mapped to letter=\(String(letter), privacy: .public) — prompts.json has \(lib.prompts.count) entries")
             return
         }
+        Log.fire.info("matched prompt name=\(prompt.name, privacy: .public) template_len=\(prompt.template.count, privacy: .public)")
 
         streamTask?.cancel()
         state.output = ""
         state.isStreaming = true
 
+        let t0 = Date()
+
         streamTask = Task { @MainActor [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                Log.fire.error("self nil in stream task")
+                return
+            }
             do {
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms → calling Capture.captureAndOCR")
                 let ocr = try await Capture.captureAndOCR()
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms ← OCR returned \(ocr.count, privacy: .public) chars")
                 guard !ocr.isEmpty else {
-                    NSLog("coshot: nothing on screen to send")
+                    Log.fire.error("OCR returned empty, aborting")
                     self.state.isStreaming = false
                     return
                 }
 
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms → CerebrasClient.stream model=\(prompt.model ?? "llama3.1-8b", privacy: .public)")
                 try await CerebrasClient().stream(
                     model: prompt.model ?? "llama3.1-8b",
                     system: prompt.template,
@@ -57,13 +68,19 @@ final class OverlayController {
                         Task { @MainActor in self?.state.output += delta }
                     }
                 )
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms ← stream done output_len=\(self.state.output.count, privacy: .public)")
 
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    Log.fire.info("task cancelled before paste")
+                    return
+                }
                 self.state.isStreaming = false
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms → Paster.paste \(self.state.output.count, privacy: .public) chars")
                 Paster.paste(self.state.output)
+                Log.fire.info("t+\(Int(Date().timeIntervalSince(t0) * 1000), privacy: .public)ms ✓ fire complete")
             } catch {
                 self.state.isStreaming = false
-                NSLog("coshot fire error: \(error.localizedDescription)")
+                Log.fire.error("ERROR: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

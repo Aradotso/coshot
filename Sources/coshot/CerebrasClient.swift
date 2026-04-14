@@ -23,7 +23,11 @@ struct CerebrasClient {
         user: String,
         onDelta: @escaping (String) -> Void
     ) async throws {
-        guard let apiKey = resolveKey() else { throw CerebrasError.missingKey }
+        guard let apiKey = resolveKey() else {
+            Log.llm.error("no API key in Keychain or COSHOT_CEREBRAS_KEY env")
+            throw CerebrasError.missingKey
+        }
+        Log.llm.info("POST \(self.endpoint.absoluteString, privacy: .public) model=\(model, privacy: .public) user_len=\(user.count, privacy: .public)")
 
         var req = URLRequest(url: endpoint)
         req.httpMethod = "POST"
@@ -44,11 +48,14 @@ struct CerebrasClient {
 
         let (bytes, response) = try await URLSession.shared.bytes(for: req)
         guard let http = response as? HTTPURLResponse else {
+            Log.llm.error("no HTTP response")
             throw CerebrasError.http(0, "No response")
         }
+        Log.llm.info("HTTP \(http.statusCode, privacy: .public)")
         if http.statusCode != 200 {
             var buffer = ""
             for try await line in bytes.lines { buffer += line + "\n"; if buffer.count > 400 { break } }
+            Log.llm.error("body: \(buffer, privacy: .public)")
             throw CerebrasError.http(http.statusCode, buffer)
         }
 

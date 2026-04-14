@@ -51,24 +51,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Listen mode
 
     private func toggleListenMode() {
+        Log.listen.info("⌥Space pressed, currently listening=\(self.listening, privacy: .public)")
         if listening { stopListening() } else { startListening() }
     }
 
     private func startListening() {
+        Log.listen.info("startListening — ax_granted=\(PermissionGate.hasAccessibility, privacy: .public) sc_granted=\(PermissionGate.hasScreenRecording, privacy: .public)")
         listening = true
         listenTap.start()
+        Log.listen.info("after tap.start() isActive=\(self.listenTap.isActive, privacy: .public)")
         updateMenuBarIcon()
 
-        // Auto-disarm after 10 seconds if the user doesn't fire a letter.
         listenTimeoutTask?.cancel()
         listenTimeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
             guard let self = self, !Task.isCancelled, self.listening else { return }
+            Log.listen.info("auto-disarm after 10s timeout")
             self.stopListening()
         }
     }
 
     private func stopListening() {
+        Log.listen.info("stopListening")
         listening = false
         listenTap.stop()
         listenTimeoutTask?.cancel()
@@ -77,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleListenedLetter(_ letter: Character) {
+        Log.listen.info("handleListenedLetter \(String(letter), privacy: .public)")
         stopListening()
         overlay.fireListenedPrompt(letter)
     }
