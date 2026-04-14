@@ -31,6 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Poll every 60s for new releases. The loop runs forever in the background.
         UpdateChecker.shared.startPolling()
+
+        // Pre-prompt for Screen Recording + Accessibility. Auto-relaunches
+        // when Screen Recording is approved — no manual quit/relaunch dance.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            PermissionGate.ensureGranted()
+        }
     }
 
     private var versionString: String {

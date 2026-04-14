@@ -51,7 +51,19 @@ final class OverlayController {
                     ? "No text detected on screen"
                     : "Press A · S · D · F · G"
             } catch {
-                self.state.status = "Capture failed: \(error.localizedDescription)"
+                // If capture failed because of TCC, route through PermissionGate
+                // instead of surfacing a dead-end error to the user. The gate
+                // will auto-relaunch coshot the moment Screen Recording is granted.
+                let msg = error.localizedDescription.lowercased()
+                let tccFailure = msg.contains("declined")
+                    || msg.contains("tcc")
+                    || !PermissionGate.hasScreenRecording
+                if tccFailure {
+                    self.hide()
+                    PermissionGate.reactToScreenRecordingDenied()
+                } else {
+                    self.state.status = "Capture failed: \(error.localizedDescription)"
+                }
             }
         }
     }
