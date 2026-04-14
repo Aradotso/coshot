@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// The always-visible home-row key row. Typing a letter fires the matching
-/// prompt and auto-pastes on completion. Clicking a key opens the inline
-/// system-prompt editor for that prompt.
+/// The home-row key row. Single-click a tile → run the prompt end-to-end
+/// (capture → LLM → clipboard → paste into the frontmost app). Double-click
+/// → open the inline system-prompt editor for that prompt.
 struct HomeRowKeys: View {
     let prompts: [Prompt]
     let lastKey: String
-    /// Called with the prompt's index when the user clicks the key with the mouse.
-    let onTap: (Int) -> Void
+    let onRun: (Int) -> Void
+    let onEdit: (Int) -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -16,7 +16,8 @@ struct HomeRowKeys: View {
                     letter: prompt.key.uppercased(),
                     name: prompt.name,
                     active: lastKey.lowercased() == prompt.key.lowercased(),
-                    onTap: { onTap(idx) }
+                    onRun:  { onRun(idx) },
+                    onEdit: { onEdit(idx) }
                 )
             }
         }
@@ -28,40 +29,51 @@ struct BigKey: View {
     let letter: String
     let name: String
     let active: Bool
-    let onTap: () -> Void
+    let onRun: () -> Void
+    let onEdit: () -> Void
 
     @State private var hovering = false
+    @State private var pressed = false
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 10) {
-                Text(letter)
-                    .font(.system(size: 34, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                Text(name)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .padding(.horizontal, 4)
-            }
-            .frame(maxWidth: .infinity, minHeight: 108)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(fillColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(borderColor, lineWidth: active ? 2 : 1)
-            )
-            .scaleEffect(active ? 0.94 : (hovering ? 1.015 : 1))
-            .animation(.spring(response: 0.22, dampingFraction: 0.65), value: active)
-            .animation(.easeOut(duration: 0.12), value: hovering)
+        VStack(spacing: 10) {
+            Text(letter)
+                .font(.system(size: 34, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            Text(name)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(.white.opacity(0.72))
+                .padding(.horizontal, 4)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 108)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(fillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: active ? 2 : 1)
+        )
+        .scaleEffect(pressed ? 0.94 : (active ? 0.96 : (hovering ? 1.015 : 1)))
+        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: active)
+        .animation(.easeOut(duration: 0.1), value: pressed)
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .contentShape(Rectangle())
+        // Order matters: double-tap must be evaluated before single-tap so
+        // SwiftUI knows to disambiguate.
+        .onTapGesture(count: 2) {
+            onEdit()
+        }
+        .onTapGesture(count: 1) {
+            pressed = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { pressed = false }
+            onRun()
+        }
         .onHover { hovering = $0 }
-        .help("Click to edit system prompt")
+        .help("click to run · double-click to edit")
     }
 
     private var fillColor: Color {

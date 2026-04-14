@@ -54,15 +54,19 @@ final class OverlayController {
         state.status = capture ? "Capturing…" : "Configure"
 
         if capture {
-            // HOTKEY PATH: do NOT call NSApp.activate.
-            // The .nonactivatingPanel style mask lets this panel become key
-            // without coshot stealing focus from the user's target app, so
-            // auto-paste via CGEventPost lands where the cursor was.
-            panel!.makeKeyAndOrderFront(nil)
+            // HOTKEY PATH: orderFrontRegardless shows the panel visually
+            // without making it key and without activating coshot. The
+            // user's target app stays frontmost, so ⌘V landed via
+            // CGEventPost goes where the cursor was. All interaction in
+            // capture mode is mouse-only (single-click = run, double-click
+            // = edit); no keyboard shortcuts, because key events continue
+            // to flow into the target app.
+            panel!.orderFrontRegardless()
         } else {
             // CONFIG PATH: user clicked the Dock / menu bar, so activate
-            // normally. Paste won't work from here (coshot is frontmost) —
-            // that's fine, config mode is for editing prompts.
+            // normally. Paste won't work from here (coshot is frontmost)
+            // — that's fine, config mode is for editing prompts and
+            // keyboard shortcuts work here.
             NSApp.activate(ignoringOtherApps: true)
             panel!.makeKeyAndOrderFront(nil)
         }
@@ -123,6 +127,7 @@ final class OverlayController {
 
         let view = OverlayView(
             state: state,
+            onRunPrompt:  { [weak self] index in self?.runPromptAt(index) },
             onEditPrompt: { [weak self] index in self?.startEdit(at: index) },
             onSaveEdit:   { [weak self] index in self?.saveEdit(at: index) },
             onCancelEdit: { [weak self] in self?.cancelEdit() }
@@ -179,6 +184,15 @@ final class OverlayController {
     }
 
     // MARK: - Prompt execution
+
+    /// Called from a mouse click on a BigKey tile. Same effect as typing
+    /// the prompt's letter in config mode — captures (already done on show),
+    /// runs the LLM, copies to clipboard, pastes into the frontmost app.
+    private func runPromptAt(_ index: Int) {
+        guard index < state.prompts.count else { return }
+        state.lastKey = state.prompts[index].key.lowercased()
+        run(state.prompts[index])
+    }
 
     private func run(_ prompt: Prompt) {
         guard let ocr = state.ocrText, !ocr.isEmpty else {

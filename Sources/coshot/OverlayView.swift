@@ -3,6 +3,7 @@ import AppKit
 
 struct OverlayView: View {
     @Bindable var state: OverlayState
+    let onRunPrompt: (Int) -> Void
     let onEditPrompt: (Int) -> Void
     let onSaveEdit: (Int) -> Void
     let onCancelEdit: () -> Void
@@ -23,7 +24,8 @@ struct OverlayView: View {
                 HomeRowKeys(
                     prompts: state.prompts,
                     lastKey: state.lastKey,
-                    onTap: { idx in onEditPrompt(idx) }
+                    onRun:  onRunPrompt,
+                    onEdit: onEditPrompt
                 )
                 if !state.output.isEmpty || state.isStreaming {
                     outputPane
@@ -135,15 +137,13 @@ struct OverlayView: View {
         HStack(spacing: 6) {
             Spacer()
             if state.isConfigMode {
-                Text("click a key to edit • Esc to dismiss")
+                Text("click to run · double-click to edit · Esc to dismiss")
             } else if state.isStreaming {
                 Text("streaming… will auto-paste when done")
             } else if !state.output.isEmpty {
                 Text("pasting into previous app…")
             } else {
-                Text("type")
-                Text("A · S · D · F · G").font(.system(size: 11, design: .monospaced))
-                Text("to run • click a key to edit • Esc to dismiss")
+                Text("click a letter to run · double-click to edit · ⌥Space to dismiss")
             }
             Spacer()
         }
