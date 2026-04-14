@@ -1,27 +1,22 @@
 import SwiftUI
 
-/// The always-visible home-row key row. Click a key to edit prompts.json;
-/// typing a letter fires the matching prompt and auto-pastes on completion.
+/// The always-visible home-row key row. Typing a letter fires the matching
+/// prompt and auto-pastes on completion. Clicking a key opens the inline
+/// system-prompt editor for that prompt.
 struct HomeRowKeys: View {
     let prompts: [Prompt]
     let lastKey: String
-    let onEdit: () -> Void
-
-    private let letters: [Character] = ["a", "s", "d", "f", "g"]
-
-    private func prompt(for c: Character) -> Prompt? {
-        prompts.first { $0.key.lowercased() == String(c) }
-    }
+    /// Called with the prompt's index when the user clicks the key with the mouse.
+    let onTap: (Int) -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            ForEach(letters, id: \.self) { c in
+        HStack(spacing: 14) {
+            ForEach(Array(prompts.enumerated()), id: \.offset) { idx, prompt in
                 BigKey(
-                    letter: c,
-                    name: prompt(for: c)?.name ?? "—",
-                    enabled: prompt(for: c) != nil,
-                    active: lastKey == String(c),
-                    onTap: onEdit
+                    letter: prompt.key.uppercased(),
+                    name: prompt.name,
+                    active: lastKey.lowercased() == prompt.key.lowercased(),
+                    onTap: { onTap(idx) }
                 )
             }
         }
@@ -30,50 +25,54 @@ struct HomeRowKeys: View {
 }
 
 struct BigKey: View {
-    let letter: Character
+    let letter: String
     let name: String
-    let enabled: Bool
     let active: Bool
     let onTap: () -> Void
 
+    @State private var hovering = false
+
     var body: some View {
         Button(action: onTap) {
-            VStack(spacing: 6) {
-                Text(String(letter).uppercased())
+            VStack(spacing: 10) {
+                Text(letter)
                     .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
                 Text(name)
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(.white.opacity(0.72))
                     .padding(.horizontal, 4)
             }
-            .frame(maxWidth: .infinity, minHeight: 96)
-            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 108)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(fillColor)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(borderColor, lineWidth: active ? 2 : 1)
             )
-            .scaleEffect(active ? 0.94 : 1)
-            .animation(.spring(response: 0.22, dampingFraction: 0.6), value: active)
+            .scaleEffect(active ? 0.94 : (hovering ? 1.015 : 1))
+            .animation(.spring(response: 0.22, dampingFraction: 0.65), value: active)
+            .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(enabled ? Color.white : Color.white.opacity(0.3))
-        .help("Click to edit prompts.json")
+        .onHover { hovering = $0 }
+        .help("Click to edit system prompt")
     }
 
     private var fillColor: Color {
         if active { return .orange.opacity(0.85) }
-        if enabled { return .orange.opacity(0.22) }
-        return .white.opacity(0.05)
+        if hovering { return .white.opacity(0.12) }
+        return .white.opacity(0.06)
     }
 
     private var borderColor: Color {
         if active { return .orange }
-        if enabled { return .orange.opacity(0.55) }
-        return .white.opacity(0.1)
+        if hovering { return .white.opacity(0.22) }
+        return .white.opacity(0.12)
     }
 }

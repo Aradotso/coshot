@@ -26,10 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Show (⌥Space)", action: #selector(show), keyEquivalent: "")
+        menu.addItem(withTitle: "Capture (⌥Space)", action: #selector(show), keyEquivalent: "")
+        menu.addItem(withTitle: "Configure…", action: #selector(showConfig), keyEquivalent: ",")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Set Cerebras API Key…", action: #selector(setKey), keyEquivalent: "")
-        menu.addItem(withTitle: "Open Prompts File", action: #selector(openPrompts), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(withTitle: "coshot v\(versionString)", action: nil, keyEquivalent: "")
@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func show() { overlay.toggle() }
 
+    @objc func showConfig() { overlay.showConfig() }
+
     @objc func setKey() {
         let alert = NSAlert()
         alert.messageText = "Cerebras API Key"
@@ -76,18 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc func openPrompts() {
-        let url = PromptLibrary.promptsFileURL
-        // Ensure the file exists on disk so the user can edit it.
-        _ = PromptLibrary.load()
-        NSWorkspace.shared.open(url)
-    }
 
-    /// Click on the Dock icon → toggle the overlay (instead of the default
-    /// "un-minimize windows" behaviour, which does nothing because coshot
-    /// has no document windows).
+    /// Click on the Dock icon → open the overlay in config mode (no capture,
+    /// activates coshot normally so the user can edit prompts). The overlay
+    /// in capture mode is only summoned by ⌥Space so it never steals focus
+    /// from the user's target app.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        overlay.toggle()
+        overlay.showConfig()
         return false
     }
 

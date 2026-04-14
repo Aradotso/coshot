@@ -2,9 +2,9 @@ import Foundation
 
 struct Prompt: Identifiable, Codable, Hashable {
     var id: String { key + name }
-    let key: String
-    let name: String
-    let template: String
+    var key: String
+    var name: String
+    var template: String
     var model: String? = nil
 }
 
@@ -32,5 +32,15 @@ struct PromptLibrary: Codable {
             return lib
         }
         return PromptLibrary(prompts: [])
+    }
+
+    /// Persist the current prompts to `prompts.json`. Called by the in-app
+    /// editor when the user clicks Save.
+    static func save(_ prompts: [Prompt]) throws {
+        let lib = PromptLibrary(prompts: prompts)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(lib)
+        try data.write(to: promptsFileURL, options: .atomic)
     }
 }

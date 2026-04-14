@@ -9,18 +9,29 @@ final class KeyablePanel: NSPanel {
 @MainActor
 final class OverlayController {
     private var panel: KeyablePanel?
-    private var previousApp: NSRunningApplication?
     private let state = OverlayState()
     private var streamTask: Task<Void, Never>?
     private var keyMonitor: Any?
 
+    // MARK: - Public API
+
+    /// Toggle for the ⌥Space hotkey. Capture mode: summons the overlay as a
+    /// nonactivating panel (coshot never steals focus), runs capture async,
+    /// and auto-pastes into the currently-frontmost app when the stream ends.
     func toggle() {
-        if let p = panel, p.isVisible { hide() } else { show() }
+        if let p = panel, p.isVisible { hide() } else { show(capture: true) }
     }
 
-    private func show() {
-        previousApp = NSWorkspace.shared.frontmostApplication
+    /// Called when the user clicks the Dock icon or the menu bar "Configure…"
+    /// item. Activates coshot normally (user intent is explicit), skips
+    /// capture, and opens the overlay in config mode.
+    func showConfig() {
+        show(capture: false)
+    }
 
+    // MARK: - Show / hide
+
+    private func show(capture: Bool) {
         if panel == nil { buildPanel() }
 
         if let screen = NSScreen.main {
@@ -32,39 +43,49 @@ final class OverlayController {
             ))
         }
 
-        // Refresh state each show so edited prompts.json is picked up.
+        // Refresh state each show so disk edits are picked up.
         state.prompts = PromptLibrary.load().prompts
         state.output = ""
         state.ocrText = nil
         state.lastKey = ""
+        state.editingPromptIndex = nil
         state.isStreaming = false
-        state.status = "Capturing…"
+        state.isConfigMode = !capture
+        state.status = capture ? "Capturing…" : "Configure"
 
-        NSApp.activate(ignoringOtherApps: true)
-        panel!.makeKeyAndOrderFront(nil)
+        if capture {
+            // HOTKEY PATH: do NOT call NSApp.activate.
+            // The .nonactivatingPanel style mask lets this panel become key
+            // without coshot stealing focus from the user's target app, so
+            // auto-paste via CGEventPost lands where the cursor was.
+            panel!.makeKeyAndOrderFront(nil)
+        } else {
+            // CONFIG PATH: user clicked the Dock / menu bar, so activate
+            // normally. Paste won't work from here (coshot is frontmost) —
+            // that's fine, config mode is for editing prompts.
+            NSApp.activate(ignoringOtherApps: true)
+            panel!.makeKeyAndOrderFront(nil)
+        }
 
-        Task { @MainActor in
-            do {
-                let text = try await Capture.captureAndOCR()
-                self.state.ocrText = text
-                self.state.status = text.isEmpty
-                    ? "No text detected on screen"
-                    : "Press A · S · D · F · G"
-            } catch {
-                // If capture failed because of TCC, surface a helpful status
-                // in the overlay and start a silent background poll. Do NOT
-                // auto-hide the panel or pop a modal — that was causing
-                // ⌥Space to feel like "it quit the app" because the alert's
-                // Escape key was mapped to the quit button.
-                let msg = error.localizedDescription.lowercased()
-                let tccFailure = msg.contains("declined")
-                    || msg.contains("tcc")
-                    || !PermissionGate.hasScreenRecording
-                if tccFailure {
-                    self.state.status = "Screen Recording denied — enable it in System Settings"
-                    PermissionGate.reactToScreenRecordingDenied()
-                } else {
-                    self.state.status = "Capture failed: \(error.localizedDescription)"
+        if capture {
+            Task { @MainActor in
+                do {
+                    let text = try await Capture.captureAndOCR()
+                    self.state.ocrText = text
+                    self.state.status = text.isEmpty
+                        ? "No text detected on screen"
+                        : "Press A · S · D · F · G"
+                } catch {
+                    let msg = error.localizedDescription.lowercased()
+                    let tccFailure = msg.contains("declined")
+                        || msg.contains("tcc")
+                        || !PermissionGate.hasScreenRecording
+                    if tccFailure {
+                        self.state.status = "Screen Recording denied — enable it in System Settings"
+                        PermissionGate.reactToScreenRecordingDenied()
+                    } else {
+                        self.state.status = "Capture failed: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -73,12 +94,16 @@ final class OverlayController {
     private func hide() {
         streamTask?.cancel()
         panel?.orderOut(nil)
-        previousApp?.activate()
+        // No previousApp?.activate() — we never activated in the first place
+        // in capture mode, and in config mode the user can pick their own
+        // next app.
     }
+
+    // MARK: - Panel construction
 
     private func buildPanel() {
         let p = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
@@ -96,12 +121,19 @@ final class OverlayController {
         p.isOpaque = false
         p.hasShadow = true
 
-        let view = OverlayView(state: state)
+        let view = OverlayView(
+            state: state,
+            onEditPrompt: { [weak self] index in self?.startEdit(at: index) },
+            onSaveEdit:   { [weak self] index in self?.saveEdit(at: index) },
+            onCancelEdit: { [weak self] in self?.cancelEdit() }
+        )
         p.contentView = NSHostingView(rootView: view)
         panel = p
 
         installKeyMonitor()
     }
+
+    // MARK: - Key routing
 
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -113,29 +145,44 @@ final class OverlayController {
     }
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
-        // Escape → hide
+        // Escape: close editor if open; otherwise hide the panel.
         if event.keyCode == 53 {
-            hide()
+            if state.editingPromptIndex != nil {
+                cancelEdit()
+            } else {
+                hide()
+            }
             return nil
+        }
+
+        // While editing a prompt, let all keys reach the TextEditor.
+        if state.editingPromptIndex != nil {
+            // ⌘S saves.
+            if event.keyCode == 1 && event.modifierFlags.contains(.command),
+               let idx = state.editingPromptIndex {
+                saveEdit(at: idx)
+                return nil
+            }
+            return event
         }
 
         let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
         guard !chars.isEmpty else { return event }
 
-        // Direct letter → run immediately
-        if let p = state.prompts.first(where: { $0.key.lowercased() == chars }) {
+        if let index = state.prompts.firstIndex(where: { $0.key.lowercased() == chars }) {
             state.lastKey = chars
-            run(p)
+            run(state.prompts[index])
             return nil
         }
 
         return event
     }
 
+    // MARK: - Prompt execution
+
     private func run(_ prompt: Prompt) {
         guard let ocr = state.ocrText, !ocr.isEmpty else {
-            // Don't overwrite the existing status — it already explains why
-            // (still capturing, capture failed, or screen is genuinely empty).
+            // Capture hasn't completed or failed — status already explains.
             return
         }
         streamTask?.cancel()
@@ -156,7 +203,6 @@ final class OverlayController {
                 guard !Task.isCancelled else { return }
                 self.state.isStreaming = false
                 self.state.status = "Pasting…"
-                // Brief pause so the user sees the full result before it vanishes.
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 self.pasteOutput()
             } catch {
@@ -172,8 +218,33 @@ final class OverlayController {
         let text = state.output
         guard !text.isEmpty else { return }
         hide()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            Paster.paste(text)
+        // No focus-restoration delay — we never stole focus.
+        Paster.paste(text)
+    }
+
+    // MARK: - Edit flow
+
+    private func startEdit(at index: Int) {
+        guard index < state.prompts.count else { return }
+        state.editingPromptIndex = index
+        state.status = "Editing — ⌘S saves, Esc cancels"
+    }
+
+    private func saveEdit(at index: Int) {
+        guard index < state.prompts.count else { return }
+        do {
+            try PromptLibrary.save(state.prompts)
+            state.editingPromptIndex = nil
+            state.status = state.isConfigMode ? "Saved" : "Saved — ready"
+        } catch {
+            state.status = "Save failed: \(error.localizedDescription)"
         }
+    }
+
+    private func cancelEdit() {
+        // Reload from disk to discard unsaved changes.
+        state.prompts = PromptLibrary.load().prompts
+        state.editingPromptIndex = nil
+        state.status = state.isConfigMode ? "Configure" : "Ready"
     }
 }
