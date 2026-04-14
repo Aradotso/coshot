@@ -1,0 +1,14 @@
+{
+  "prompts": [
+    { "key": "r", "name": "Rewrite",     "template": "Rewrite the following text to be clearer and more concise. Output only the rewritten text, no preamble." },
+    { "key": "s", "name": "Summarize",   "template": "Summarize the following into 3-5 terse bullets. Output only the bullets." },
+    { "key": "e", "name": "Explain",     "template": "Explain the following in simple plain English. Output only the explanation." },
+    { "key": "t", "name": "Translate",   "template": "Translate the following into English. Output only the translation." },
+    { "key": "f", "name": "Fix Grammar", "template": "Fix any spelling or grammar mistakes in the following. Output only the corrected text." },
+    { "key": "c", "name": "Code Review", "template": "Review this code and list the top 3 issues. Be terse." },
+    { "key": "a", "name": "Answer",      "template": "Answer the question implicit in the following text directly. No preamble." },
+    { "key": "p", "name": "Pro Tone",    "template": "Rewrite in a professional tone suitable for business email. Output only the rewritten text." },
+    { "key": "k", "name": "Key Points",  "template": "Extract the 5 most important facts from the following. Output as a numbered list." },
+    { "key": "q", "name": "Questions",   "template": "Generate 5 sharp questions about the following. Output only the numbered questions." }
+  ]
+}

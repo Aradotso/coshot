@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+DerivedData/
+coshot.app/
+.env.local
+.DS_Store
+*.xcodeproj
