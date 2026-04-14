@@ -15,13 +15,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.8</string>
+	<string>0.1.9</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.8</string>
+	<string>0.1.9</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>coshot pastes generated text into the app you were last using.</string>
 	<key>NSHighResolutionCapable</key>
