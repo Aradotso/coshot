@@ -11,49 +11,61 @@ struct OverlayView: View {
     let onFixAccessibility: () -> Void
     let onFixApiKey: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
+    // Ara design tokens
+    static let r: CGFloat = 4          // corner radius (Ara uses 3px, we round to 4)
+    static let rLarge: CGFloat = 6     // outer container radius
+    static let pagePad: CGFloat = 28
 
-            if let idx = state.editingPromptIndex, idx < state.prompts.count {
-                PromptEditorView(
-                    prompt: $state.prompts[idx],
-                    onSave: { onSaveEdit(idx) },
-                    onCancel: { onCancelEdit() }
-                )
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else {
-                ocrPreview
-                HomeRowKeys(
-                    prompts: state.prompts,
-                    lastKey: state.lastKey,
-                    onRun:  onRunPrompt,
-                    onEdit: onEditPrompt
-                )
-                if state.isConfigMode {
-                    PermissionsPanel(
-                        hasScreenRecording: state.hasScreenRecording,
-                        hasAccessibility: state.hasAccessibility,
-                        hasApiKey: state.hasApiKey,
-                        onFixScreenRecording: onFixScreenRecording,
-                        onFixAccessibility: onFixAccessibility,
-                        onFixApiKey: onFixApiKey
-                    )
-                    .transition(.opacity)
-                }
-                if !state.output.isEmpty || state.isStreaming {
-                    outputPane
-                        .transition(.opacity)
-                }
-                Spacer(minLength: 4)
-                footerHint
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if state.isConfigMode {
+                banner
             }
+
+            VStack(alignment: .leading, spacing: 18) {
+                header
+
+                if let idx = state.editingPromptIndex, idx < state.prompts.count {
+                    PromptEditorView(
+                        prompt: $state.prompts[idx],
+                        onSave: { onSaveEdit(idx) },
+                        onCancel: { onCancelEdit() }
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else {
+                    ocrPreview
+                    HomeRowKeys(
+                        prompts: state.prompts,
+                        lastKey: state.lastKey,
+                        onRun:  onRunPrompt,
+                        onEdit: onEditPrompt
+                    )
+                    if state.isConfigMode {
+                        PermissionsPanel(
+                            hasScreenRecording: state.hasScreenRecording,
+                            hasAccessibility: state.hasAccessibility,
+                            hasApiKey: state.hasApiKey,
+                            onFixScreenRecording: onFixScreenRecording,
+                            onFixAccessibility: onFixAccessibility,
+                            onFixApiKey: onFixApiKey
+                        )
+                        .transition(.opacity)
+                    }
+                    if !state.output.isEmpty || state.isStreaming {
+                        outputPane
+                            .transition(.opacity)
+                    }
+                    Spacer(minLength: 4)
+                    footerHint
+                }
+            }
+            .padding(Self.pagePad)
         }
-        .padding(28)
-        .frame(minWidth: 760, minHeight: 520, alignment: .topLeading)
+        .frame(minWidth: 780, minHeight: state.isConfigMode ? 620 : 480, alignment: .topLeading)
         .background(background)
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
+        .font(.system(.body, design: .default))
         .animation(.easeOut(duration: 0.18), value: state.editingPromptIndex)
         .animation(.easeOut(duration: 0.15), value: state.isStreaming)
     }
@@ -62,12 +74,59 @@ struct OverlayView: View {
 
     private var background: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.ultraThinMaterial)
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(.black.opacity(0.35))
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: Self.rLarge, style: .continuous)
+                .fill(Color(white: 0.07))
+            RoundedRectangle(cornerRadius: Self.rLarge, style: .continuous)
                 .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    // MARK: - Ara banner (config mode only)
+
+    @ViewBuilder
+    private var banner: some View {
+        if let url = Bundle.module.url(forResource: "AraArt", withExtension: "png"),
+           let nsImage = NSImage(contentsOf: url) {
+            ZStack(alignment: .bottomLeading) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 132)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
+
+                LinearGradient(
+                    colors: [.black.opacity(0.0), .black.opacity(0.55)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 132)
+            }
+            .frame(height: 132)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: Self.rLarge,
+                    bottomLeadingRadius: 0,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: Self.rLarge,
+                    style: .continuous
+                )
+            )
+            .overlay(alignment: .bottomLeading) {
+                HStack {
+                    Rectangle()
+                        .fill(.white)
+                        .frame(width: 2, height: 28)
+                    Text("coshot")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("/ ara")
+                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                .padding(.leading, Self.pagePad)
+                .padding(.bottom, 16)
+            }
         }
     }
 
@@ -75,26 +134,16 @@ struct OverlayView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            HStack(spacing: 10) {
+            if !state.isConfigMode {
                 Text("coshot")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.92))
-                if state.isConfigMode {
-                    Text("CONFIG")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(.white.opacity(0.25), lineWidth: 1)
-                        )
-                }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.95))
             }
             Spacer()
             Text(state.status)
-                .font(.system(size: 12, weight: .regular, design: .default))
-                .foregroundStyle(.white.opacity(0.55))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.45))
+                .textCase(.lowercase)
         }
     }
 
@@ -105,18 +154,18 @@ struct OverlayView: View {
         if let ocr = state.ocrText, !ocr.isEmpty {
             ScrollView {
                 Text(ocr)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.4))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 64)
-            .padding(12)
+            .frame(maxHeight: 56)
+            .padding(10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(.white.opacity(0.04))
+                RoundedRectangle(cornerRadius: Self.r)
+                    .fill(.white.opacity(0.035))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: Self.r)
+                            .strokeBorder(.white.opacity(0.07), lineWidth: 1)
                     )
             )
         }
@@ -125,21 +174,19 @@ struct OverlayView: View {
     // MARK: - Output pane
 
     private var outputPane: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                Text(state.output.isEmpty ? "…" : state.output)
-                    .font(.system(size: 14))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-            }
-            .frame(maxHeight: 160)
+        ScrollView {
+            Text(state.output.isEmpty ? "…" : state.output)
+                .font(.system(size: 13))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
         }
+        .frame(maxHeight: 150)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: Self.r)
+                .fill(.white.opacity(0.045))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: Self.r)
                         .strokeBorder(.white.opacity(0.08), lineWidth: 1)
                 )
         )
@@ -151,18 +198,19 @@ struct OverlayView: View {
         HStack(spacing: 6) {
             Spacer()
             if state.isConfigMode {
-                Text("click to run · double-click to edit · Esc to dismiss")
+                Text("click to run · double-click to edit · esc to dismiss")
             } else if state.isStreaming {
                 Text("streaming… will auto-paste when done")
             } else if !state.output.isEmpty {
-                Text("pasting into previous app…")
+                Text("pasting…")
             } else {
-                Text("click a letter to run · double-click to edit · ⌥Space to dismiss")
+                Text("click a letter to run · double-click to edit · ⌥space to dismiss")
             }
             Spacer()
         }
-        .font(.system(size: 11))
-        .foregroundStyle(.white.opacity(0.38))
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(.white.opacity(0.35))
+        .textCase(.lowercase)
     }
 }
 
@@ -179,14 +227,15 @@ struct PromptEditorView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 10) {
                 Text(prompt.key.uppercased())
-                    .font(.system(size: 14, weight: .heavy, design: .monospaced))
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .frame(width: 26, height: 26)
                     .background(
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(.orange.opacity(0.9))
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .fill(.white)
                     )
+                    .foregroundStyle(.black)
                 Text(prompt.name)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 17, weight: .semibold))
                 Spacer()
                 Text("SYSTEM PROMPT")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
@@ -194,53 +243,51 @@ struct PromptEditorView: View {
             }
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(0.05))
+                RoundedRectangle(cornerRadius: OverlayView.r)
+                    .fill(.white.opacity(0.045))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .strokeBorder(.white.opacity(0.09), lineWidth: 1)
                     )
                 TextEditor(text: $prompt.template)
                     .focused($editorFocused)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.92))
                     .scrollContentBackground(.hidden)
                     .padding(14)
             }
-            .frame(minHeight: 220)
+            .frame(minHeight: 200)
 
-            HStack(alignment: .center, spacing: 12) {
-                TextField("Display name", text: $prompt.name)
+            HStack(alignment: .center, spacing: 10) {
+                TextField("display name", text: $prompt.name)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(.white.opacity(0.05))
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .fill(.white.opacity(0.045))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: OverlayView.r)
+                                    .strokeBorder(.white.opacity(0.09), lineWidth: 1)
                             )
                     )
                     .frame(maxWidth: 220)
 
                 Spacer()
 
-                Button("Cancel", action: onCancel)
+                Button("cancel", action: onCancel)
                     .buttonStyle(GhostButtonStyle())
                     .keyboardShortcut(.cancelAction)
 
-                Button("Save", action: onSave)
-                    .buttonStyle(OrangeButtonStyle())
+                Button("save", action: onSave)
+                    .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut("s", modifiers: .command)
             }
         }
         .onAppear { editorFocused = true }
     }
 }
-
-// MARK: - Button styles
 
 // MARK: - Permissions panel (config mode)
 
@@ -256,24 +303,24 @@ struct PermissionsPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("PERMISSIONS")
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.42))
+                .foregroundStyle(.white.opacity(0.4))
 
             VStack(spacing: 6) {
                 PermissionRow(
-                    name: "Screen Recording",
-                    subtitle: "needed to capture your screen for OCR",
+                    name: "screen recording",
+                    subtitle: "captures your screen for ocr",
                     granted: hasScreenRecording,
                     onFix: onFixScreenRecording
                 )
                 PermissionRow(
-                    name: "Accessibility",
-                    subtitle: "needed for ⌥Space listen mode and auto-paste",
+                    name: "accessibility",
+                    subtitle: "⌥space listen mode and auto-paste",
                     granted: hasAccessibility,
                     onFix: onFixAccessibility
                 )
                 PermissionRow(
-                    name: "Cerebras API Key",
-                    subtitle: "needed to stream responses from Cerebras",
+                    name: "cerebras api key",
+                    subtitle: "streams responses from cerebras",
                     granted: hasApiKey,
                     onFix: onFixApiKey
                 )
@@ -281,11 +328,11 @@ struct PermissionsPanel: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.white.opacity(0.04))
+            RoundedRectangle(cornerRadius: OverlayView.r)
+                .fill(.white.opacity(0.035))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: OverlayView.r)
+                        .strokeBorder(.white.opacity(0.07), lineWidth: 1)
                 )
         )
         .animation(.easeOut(duration: 0.2), value: hasScreenRecording)
@@ -302,22 +349,19 @@ struct PermissionRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(granted ? Color.green : Color.red.opacity(0.85))
-                    .frame(width: 10, height: 10)
-                Circle()
-                    .stroke(.black.opacity(0.35), lineWidth: 0.5)
-                    .frame(width: 10, height: 10)
-            }
+            Rectangle()
+                .fill(granted ? Color.green : Color.red.opacity(0.85))
+                .frame(width: 7, height: 7)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .textCase(.lowercase)
                 Text(subtitle)
                     .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.42))
+                    .textCase(.lowercase)
             }
 
             Spacer()
@@ -325,33 +369,35 @@ struct PermissionRow: View {
             if granted {
                 Text("granted")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.green.opacity(0.85))
+                    .foregroundStyle(.green)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(.green.opacity(0.12))
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .stroke(.green.opacity(0.4), lineWidth: 1)
                     )
             } else {
                 Button(action: onFix) {
-                    Text("Grant")
+                    Text("grant")
                 }
-                .buttonStyle(OrangeButtonStyle())
+                .buttonStyle(PrimaryButtonStyle())
             }
         }
     }
 }
 
-struct OrangeButtonStyle: ButtonStyle {
+// MARK: - Button styles
+
+struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 9)
-            .foregroundStyle(.white)
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .foregroundStyle(.black)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(configuration.isPressed ? .orange.opacity(0.7) : .orange)
+                RoundedRectangle(cornerRadius: OverlayView.r)
+                    .fill(configuration.isPressed ? Color.white.opacity(0.75) : .white)
             )
     }
 }
@@ -359,16 +405,16 @@ struct OrangeButtonStyle: ButtonStyle {
 struct GhostButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
             .foregroundStyle(.white.opacity(0.75))
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(configuration.isPressed ? .white.opacity(0.08) : .white.opacity(0.04))
+                RoundedRectangle(cornerRadius: OverlayView.r)
+                    .fill(configuration.isPressed ? .white.opacity(0.08) : .clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .strokeBorder(.white.opacity(0.18), lineWidth: 1)
                     )
             )
     }

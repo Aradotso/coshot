@@ -75,6 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Refresh bound-letter set from disk each time so edits to prompts.json
+        // propagate without needing to relaunch coshot.
+        let prompts = PromptLibrary.load().prompts
+        listenTap.validLetters = Set(prompts.compactMap { $0.key.lowercased().first })
+        Log.listen.info("validLetters=\(self.listenTap.validLetters.map(String.init).sorted().joined(separator: ","), privacy: .public)")
+
         listenTap.start()
         Log.listen.info("after tap.start() isActive=\(self.listenTap.isActive, privacy: .public)")
 

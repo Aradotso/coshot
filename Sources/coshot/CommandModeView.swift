@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// The home-row key row. Single-click a tile → run the prompt end-to-end
-/// (capture → LLM → clipboard → paste into the frontmost app). Double-click
-/// → open the inline system-prompt editor for that prompt.
 struct HomeRowKeys: View {
     let prompts: [Prompt]
     let lastKey: String
@@ -10,7 +7,7 @@ struct HomeRowKeys: View {
     let onEdit: (Int) -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             ForEach(Array(prompts.enumerated()), id: \.offset) { idx, prompt in
                 BigKey(
                     letter: prompt.key.uppercased(),
@@ -36,37 +33,40 @@ struct BigKey: View {
     @State private var pressed = false
 
     var body: some View {
-        VStack(spacing: 10) {
-            Text(letter)
-                .font(.system(size: 34, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-            Text(name)
-                .font(.system(size: 11, weight: .medium))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                Text(letter)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Rectangle()
+                    .fill(.white.opacity(active ? 0.9 : 0.18))
+                    .frame(width: 4, height: 4)
+                    .padding(.top, 10)
+            }
+            Spacer(minLength: 0)
+            Text(name.lowercased())
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .foregroundStyle(.white.opacity(0.72))
-                .padding(.horizontal, 4)
+                .foregroundStyle(.white.opacity(0.65))
         }
-        .frame(maxWidth: .infinity, minHeight: 108)
-        .padding(.vertical, 12)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: OverlayView.r, style: .continuous)
                 .fill(fillColor)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(borderColor, lineWidth: active ? 2 : 1)
+            RoundedRectangle(cornerRadius: OverlayView.r, style: .continuous)
+                .strokeBorder(borderColor, lineWidth: active ? 1.5 : 1)
         )
-        .scaleEffect(pressed ? 0.94 : (active ? 0.96 : (hovering ? 1.015 : 1)))
-        .animation(.spring(response: 0.22, dampingFraction: 0.65), value: active)
+        .scaleEffect(pressed ? 0.97 : 1)
         .animation(.easeOut(duration: 0.1), value: pressed)
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.18), value: active)
         .contentShape(Rectangle())
-        // Order matters: double-tap must be evaluated before single-tap so
-        // SwiftUI knows to disambiguate.
-        .onTapGesture(count: 2) {
-            onEdit()
-        }
+        .onTapGesture(count: 2) { onEdit() }
         .onTapGesture(count: 1) {
             pressed = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { pressed = false }
@@ -77,14 +77,14 @@ struct BigKey: View {
     }
 
     private var fillColor: Color {
-        if active { return .orange.opacity(0.85) }
-        if hovering { return .white.opacity(0.12) }
-        return .white.opacity(0.06)
+        if active { return Color(white: 0.18) }
+        if hovering { return Color(white: 0.11) }
+        return Color(white: 0.085)
     }
 
     private var borderColor: Color {
-        if active { return .orange }
+        if active { return .white.opacity(0.7) }
         if hovering { return .white.opacity(0.22) }
-        return .white.opacity(0.12)
+        return .white.opacity(0.1)
     }
 }

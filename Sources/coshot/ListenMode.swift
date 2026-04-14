@@ -10,15 +10,21 @@ final class ListenModeTap {
     /// Called with the captured letter, on the main thread.
     var onLetter: ((Character) -> Void)?
 
+    /// Only these letters are intercepted; everything else passes through.
+    /// AppDelegate refreshes this from `PromptLibrary.load()` on every
+    /// `start()`, so any letter added to prompts.json works automatically.
+    var validLetters: Set<Character> = []
+
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
+    /// Full a-z → virtual keycode map (ANSI layout, from Carbon.HIToolbox).
     private static let letterKeyCodes: [Int64: Character] = [
-        0: "a",
-        1: "s",
-        2: "d",
-        3: "f",
-        5: "g"
+         0: "a",  1: "s",  2: "d",  3: "f",  4: "h",  5: "g",
+         6: "z",  7: "x",  8: "c",  9: "v", 11: "b", 12: "q",
+        13: "w", 14: "e", 15: "r", 16: "y", 17: "t",
+        31: "o", 32: "u", 34: "i", 35: "p",
+        37: "l", 38: "j", 40: "k", 45: "n", 46: "m"
     ]
 
     var isActive: Bool { tap != nil }
@@ -90,25 +96,23 @@ final class ListenModeTap {
         }
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        Log.listen.debug("keydown keyCode=\(keyCode, privacy: .public)")
 
         guard let letter = Self.letterKeyCodes[keyCode] else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        // Only swallow letters that are actually bound to a prompt. Other
+        // letters pass through so the user can still type normal words
+        // into the target app (sticky listen mode means the tap stays up
+        // between fires).
+        guard validLetters.contains(letter) else {
             return Unmanaged.passUnretained(event)
         }
 
         Log.listen.info("MATCHED letter=\(String(letter), privacy: .public) keyCode=\(keyCode, privacy: .public)")
 
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                Log.listen.error("self nil when firing onLetter callback")
-                return
-            }
-            guard let cb = self.onLetter else {
-                Log.listen.error("onLetter callback is nil")
-                return
-            }
-            Log.listen.info("invoking onLetter callback")
-            cb(letter)
+            self?.onLetter?(letter)
         }
         return nil  // consume
     }
