@@ -7,26 +7,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var overlay: OverlayController!
     private var hotkey: HotkeyMonitor!
+    private let listenTap = ListenModeTap()
+    private var listening = false
+    private var listenTimeoutTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         overlay = OverlayController()
 
         installMainMenu()
 
+        MenuBarIcon.load()
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
-           let icon = NSImage(contentsOf: url) {
-            icon.size = NSSize(width: 18, height: 18)
-            // NOT a template — the Ara logo has color that we want to keep,
-            // matching the Dock / app icon exactly.
-            icon.isTemplate = false
-            statusItem.button?.image = icon
-        } else {
-            statusItem.button?.title = "⚡"
-        }
+        statusItem.button?.image = MenuBarIcon.compose(listening: false)
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Capture (⌥Space)", action: #selector(show), keyEquivalent: "")
         menu.addItem(withTitle: "Configure…", action: #selector(showConfig), keyEquivalent: ",")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Set Cerebras API Key…", action: #selector(setKey), keyEquivalent: "")
@@ -37,19 +32,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Quit coshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
-        hotkey = HotkeyMonitor { [weak self] in self?.overlay.toggle() }
+        // ⌥Space arms listen mode — DOES NOT open the overlay. The next
+        // A/S/D/F/G is captured by the CGEventTap and runs end-to-end.
+        listenTap.onLetter = { [weak self] letter in
+            self?.handleListenedLetter(letter)
+        }
+        hotkey = HotkeyMonitor { [weak self] in self?.toggleListenMode() }
         hotkey.register(keyCode: UInt32(kVK_Space), modifiers: [.option])
 
-        // Poll every 60s for new releases. The loop runs forever in the background.
         UpdateChecker.shared.startPolling()
 
-        // Pre-prompt for Screen Recording + Accessibility. Auto-relaunches
-        // when Screen Recording is approved — no manual quit/relaunch dance.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
             PermissionGate.ensureGranted()
         }
     }
+
+    // MARK: - Listen mode
+
+    private func toggleListenMode() {
+        if listening { stopListening() } else { startListening() }
+    }
+
+    private func startListening() {
+        listening = true
+        listenTap.start()
+        updateMenuBarIcon()
+
+        // Auto-disarm after 10 seconds if the user doesn't fire a letter.
+        listenTimeoutTask?.cancel()
+        listenTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard let self = self, !Task.isCancelled, self.listening else { return }
+            self.stopListening()
+        }
+    }
+
+    private func stopListening() {
+        listening = false
+        listenTap.stop()
+        listenTimeoutTask?.cancel()
+        listenTimeoutTask = nil
+        updateMenuBarIcon()
+    }
+
+    private func handleListenedLetter(_ letter: Character) {
+        stopListening()
+        overlay.fireListenedPrompt(letter)
+    }
+
+    private func updateMenuBarIcon() {
+        statusItem.button?.image = MenuBarIcon.compose(listening: listening)
+    }
+
+    // MARK: - Misc
 
     private var versionString: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
@@ -58,8 +94,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func checkForUpdates() {
         UpdateChecker.shared.checkNow()
     }
-
-    @objc func show() { overlay.toggle() }
 
     @objc func showConfig() { overlay.showConfig() }
 
@@ -78,18 +112,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-
-    /// Click on the Dock icon → open the overlay in config mode (no capture,
-    /// activates coshot normally so the user can edit prompts). The overlay
-    /// in capture mode is only summoned by ⌥Space so it never steals focus
-    /// from the user's target app.
+    /// Click on the Dock icon → open the overlay in config mode (the only
+    /// place the overlay is shown now; ⌥Space is for listen mode).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         overlay.showConfig()
         return false
     }
 
     /// .regular apps must provide a main menu or macOS crashes on launch.
-    /// Minimal app menu with Quit + the standard Services/Hide entries.
     private func installMainMenu() {
         let mainMenu = NSMenu()
 

@@ -15,18 +15,57 @@ final class OverlayController {
 
     // MARK: - Public API
 
-    /// Toggle for the ⌥Space hotkey. Capture mode: summons the overlay as a
-    /// nonactivating panel (coshot never steals focus), runs capture async,
-    /// and auto-pastes into the currently-frontmost app when the stream ends.
-    func toggle() {
-        if let p = panel, p.isVisible { hide() } else { show(capture: true) }
-    }
-
     /// Called when the user clicks the Dock icon or the menu bar "Configure…"
     /// item. Activates coshot normally (user intent is explicit), skips
-    /// capture, and opens the overlay in config mode.
+    /// capture, and opens the overlay in config mode for editing prompts.
     func showConfig() {
         show(capture: false)
+    }
+
+    /// Fire a prompt without opening the overlay. This is the ⌥Space
+    /// listen-mode path: AppDelegate intercepts the letter via CGEventTap
+    /// and calls here. We run capture → LLM → paste entirely in the
+    /// background; the user's cursor is still in their target app so
+    /// CGEventPost ⌘V lands there.
+    func fireListenedPrompt(_ letter: Character) {
+        let lib = PromptLibrary.load()
+        let key = String(letter).lowercased()
+        guard let prompt = lib.prompts.first(where: { $0.key.lowercased() == key }) else {
+            NSLog("coshot: no prompt mapped to \(letter)")
+            return
+        }
+
+        streamTask?.cancel()
+        state.output = ""
+        state.isStreaming = true
+
+        streamTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                let ocr = try await Capture.captureAndOCR()
+                guard !ocr.isEmpty else {
+                    NSLog("coshot: nothing on screen to send")
+                    self.state.isStreaming = false
+                    return
+                }
+
+                try await CerebrasClient().stream(
+                    model: prompt.model ?? "llama3.1-8b",
+                    system: prompt.template,
+                    user: ocr,
+                    onDelta: { [weak self] delta in
+                        Task { @MainActor in self?.state.output += delta }
+                    }
+                )
+
+                guard !Task.isCancelled else { return }
+                self.state.isStreaming = false
+                Paster.paste(self.state.output)
+            } catch {
+                self.state.isStreaming = false
+                NSLog("coshot fire error: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Show / hide
