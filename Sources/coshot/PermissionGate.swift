@@ -29,22 +29,19 @@ enum PermissionGate {
     private static var isPolling = false
     private static var isAlertShown = false
 
-    /// Called from AppDelegate on launch.
+    /// Called from AppDelegate on launch. Only triggers the native system
+    /// dialogs if permissions are missing AND silently — we rely on the
+    /// config-mode Permissions panel + the listen-mode Grant flow to
+    /// surface problems interactively. Calling the AX prompt API from
+    /// launch caused duplicate "Accessibility Access" dialogs to appear
+    /// every relaunch while the user was mid-grant.
     static func ensureGranted() {
-        if !hasAccessibility {
-            _ = AXIsProcessTrustedWithOptions([
-                "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
-            ] as CFDictionary)
-        }
-
         if !hasScreenRecording {
             _ = CGRequestScreenCaptureAccess()
 
             // Touch ScreenCaptureKit once so TCC registers coshot in the
             // Screen Recording settings list even if the user dismissed
-            // the native dialog without clicking Allow. Without this call,
-            // coshot can be missing from System Settings → Privacy &
-            // Security → Screen Recording, giving nothing to toggle on.
+            // the native dialog without clicking Allow.
             Task.detached {
                 _ = try? await SCShareableContent.excludingDesktopWindows(
                     false, onScreenWindowsOnly: true

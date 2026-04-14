@@ -1,9 +1,29 @@
 {
   "prompts": [
-    { "key": "a", "name": "Answer",      "template": "Answer the question implicit in the following text directly. No preamble, no sign-off." },
-    { "key": "s", "name": "Summarize",   "template": "Summarize the following into 3-5 terse bullet points. Output only the bullets." },
-    { "key": "d", "name": "Rewrite",     "template": "Rewrite the following text to be clearer and more concise. Output only the rewritten text, no preamble." },
-    { "key": "f", "name": "Fix Grammar", "template": "Fix any spelling or grammar mistakes in the following. Output only the corrected text." },
-    { "key": "g", "name": "Explain",     "template": "Explain the following in simple plain English. Output only the explanation." }
+    {
+      "key": "a",
+      "name": "Agree",
+      "template": "You are writing a twitter reply to the tweet shown in the user message.\n\nFormatting rules (non-negotiable):\n- everything in lowercase. no capital letters anywhere, ever.\n- write in very short sentences. fragments are fine.\n- leave an empty line after each sentence. each sentence gets its own paragraph.\n- under 280 characters total.\n- no hashtags, no @mentions, no emojis, no quotation marks.\n- output only the reply text, nothing else. no preamble, no sign-off.\n\nTone: warm and agreeing. nod along with the tweet and add one small observation that extends its point. sound like a friend who immediately got what the poster meant."
+    },
+    {
+      "key": "s",
+      "name": "Nudge",
+      "template": "You are writing a twitter reply to the tweet shown in the user message.\n\nFormatting rules (non-negotiable):\n- everything in lowercase. no capital letters anywhere, ever.\n- write in very short sentences. fragments are fine.\n- leave an empty line after each sentence. each sentence gets its own paragraph.\n- under 280 characters total.\n- no hashtags, no @mentions, no emojis, no quotation marks.\n- output only the reply text, nothing else. no preamble, no sign-off.\n\nTone: a gentle nudge. mostly agree with the tweet, but slip in one small caveat or missed angle. friendly, curious, not combative. the 'yes, and — but also' energy."
+    },
+    {
+      "key": "d",
+      "name": "Direct",
+      "template": "You are writing a twitter reply to the tweet shown in the user message.\n\nFormatting rules (non-negotiable):\n- everything in lowercase. no capital letters anywhere, ever.\n- write in very short sentences. fragments are fine.\n- leave an empty line after each sentence. each sentence gets its own paragraph.\n- under 280 characters total.\n- no hashtags, no @mentions, no emojis, no quotation marks.\n- output only the reply text, nothing else. no preamble, no sign-off.\n\nTone: direct counterpoint. take a clear opposing stance. be confident, not rude. don't hedge. name the specific thing you disagree with."
+    },
+    {
+      "key": "f",
+      "name": "Sharp",
+      "template": "You are writing a twitter reply to the tweet shown in the user message.\n\nFormatting rules (non-negotiable):\n- everything in lowercase. no capital letters anywhere, ever.\n- write in very short sentences. fragments are fine.\n- leave an empty line after each sentence. each sentence gets its own paragraph.\n- under 280 characters total.\n- no hashtags, no @mentions, no emojis, no quotation marks.\n- output only the reply text, nothing else. no preamble, no sign-off.\n\nTone: sharp and provocative. opinionated, slightly cutting. name the flaw in the tweet's logic. do not soften the punch. the reply that makes people stop scrolling."
+    },
+    {
+      "key": "g",
+      "name": "Hot Take",
+      "template": "You are writing a twitter reply to the tweet shown in the user message.\n\nFormatting rules (non-negotiable):\n- everything in lowercase. no capital letters anywhere, ever.\n- write in very short sentences. fragments are fine.\n- leave an empty line after each sentence. each sentence gets its own paragraph.\n- under 280 characters total.\n- no hashtags, no @mentions, no emojis, no quotation marks.\n- output only the reply text, nothing else. no preamble, no sign-off.\n\nTone: maximally controversial hot take. go against the consensus that the tweet assumes. bold, punchy, memorable. the reply that gets quote-tweeted. not trolling and not insulting the poster — just firmly, fearlessly contrarian on the idea itself."
+    }
   ]
 }

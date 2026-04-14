@@ -42,6 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         UpdateChecker.shared.startPolling()
 
+        // Log initial permission state so we can debug even without any
+        // ⌥Space press.
+        Log.app.info("launch v\(self.versionString, privacy: .public) ax=\(PermissionGate.hasAccessibility, privacy: .public) sc=\(PermissionGate.hasScreenRecording, privacy: .public) key=\(PermissionGate.hasApiKey, privacy: .public)")
+
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
             PermissionGate.ensureGranted()
