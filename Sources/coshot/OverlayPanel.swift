@@ -32,10 +32,12 @@ final class OverlayController {
             ))
         }
 
-        state.commandMode = false
+        // Refresh state each show so edited prompts.json is picked up.
+        state.prompts = PromptLibrary.load().prompts
         state.output = ""
         state.ocrText = nil
         state.lastKey = ""
+        state.isStreaming = false
         state.status = "Capturing…"
 
         NSApp.activate(ignoringOtherApps: true)
@@ -47,7 +49,7 @@ final class OverlayController {
                 self.state.ocrText = text
                 self.state.status = text.isEmpty
                     ? "No text detected on screen"
-                    : "Ready — press Space for command mode"
+                    : "Press A · S · D · F · G"
             } catch {
                 self.state.status = "Capture failed: \(error.localizedDescription)"
             }
@@ -62,7 +64,7 @@ final class OverlayController {
 
     private func buildPanel() {
         let p = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 440),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
@@ -80,12 +82,7 @@ final class OverlayController {
         p.isOpaque = false
         p.hasShadow = true
 
-        let view = OverlayView(
-            state: state,
-            onSubmit: { [weak self] prompt in self?.run(prompt) },
-            onPaste: { [weak self] in self?.pasteOutput() },
-            onEscape: { [weak self] in self?.hide() }
-        )
+        let view = OverlayView(state: state)
         p.contentView = NSHostingView(rootView: view)
         panel = p
 
@@ -108,27 +105,13 @@ final class OverlayController {
             return nil
         }
 
-        // ⌘↩ → paste result
-        if event.keyCode == 36 && event.modifierFlags.contains(.command) {
-            pasteOutput()
-            return nil
-        }
+        let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
+        guard !chars.isEmpty else { return event }
 
-        // Space → toggle command mode (unless already in it — then it's a key press)
-        if event.keyCode == 49 && !state.commandMode {
-            state.commandMode = true
-            state.lastKey = ""
-            return nil
-        }
-
-        if state.commandMode {
-            let chars = (event.charactersIgnoringModifiers ?? "").lowercased()
+        // Direct letter → run immediately
+        if let p = state.prompts.first(where: { $0.key.lowercased() == chars }) {
             state.lastKey = chars
-            let lib = PromptLibrary.load()
-            if let p = lib.prompts.first(where: { $0.key.lowercased() == chars }) {
-                state.commandMode = false
-                run(p)
-            }
+            run(p)
             return nil
         }
 
@@ -137,11 +120,12 @@ final class OverlayController {
 
     private func run(_ prompt: Prompt) {
         guard let ocr = state.ocrText, !ocr.isEmpty else {
-            state.status = "Nothing to send — capture failed or screen empty"
+            state.status = "Nothing on screen to send"
             return
         }
         streamTask?.cancel()
         state.output = ""
+        state.isStreaming = true
         state.status = "→ \(prompt.name)…"
 
         streamTask = Task { @MainActor in
@@ -154,11 +138,15 @@ final class OverlayController {
                         Task { @MainActor in self?.state.output += delta }
                     }
                 )
-                if !Task.isCancelled {
-                    self.state.status = "Done — ⌘↩ to paste, Esc to dismiss"
-                }
+                guard !Task.isCancelled else { return }
+                self.state.isStreaming = false
+                self.state.status = "Pasting…"
+                // Brief pause so the user sees the full result before it vanishes.
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                self.pasteOutput()
             } catch {
                 if !Task.isCancelled {
+                    self.state.isStreaming = false
                     self.state.status = "Error: \(error.localizedDescription)"
                 }
             }
@@ -169,7 +157,6 @@ final class OverlayController {
         let text = state.output
         guard !text.isEmpty else { return }
         hide()
-        // Let the previous app regain focus, then synthesise ⌘V.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             Paster.paste(text)
         }
