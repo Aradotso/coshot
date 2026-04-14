@@ -51,15 +51,17 @@ final class OverlayController {
                     ? "No text detected on screen"
                     : "Press A · S · D · F · G"
             } catch {
-                // If capture failed because of TCC, route through PermissionGate
-                // instead of surfacing a dead-end error to the user. The gate
-                // will auto-relaunch coshot the moment Screen Recording is granted.
+                // If capture failed because of TCC, surface a helpful status
+                // in the overlay and start a silent background poll. Do NOT
+                // auto-hide the panel or pop a modal — that was causing
+                // ⌥Space to feel like "it quit the app" because the alert's
+                // Escape key was mapped to the quit button.
                 let msg = error.localizedDescription.lowercased()
                 let tccFailure = msg.contains("declined")
                     || msg.contains("tcc")
                     || !PermissionGate.hasScreenRecording
                 if tccFailure {
-                    self.hide()
+                    self.state.status = "Screen Recording denied — enable it in System Settings"
                     PermissionGate.reactToScreenRecordingDenied()
                 } else {
                     self.state.status = "Capture failed: \(error.localizedDescription)"

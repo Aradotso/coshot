@@ -12,7 +12,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay = OverlayController()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "⚡"
+        if let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+           let icon = NSImage(contentsOf: url) {
+            icon.size = NSSize(width: 18, height: 18)
+            icon.isTemplate = true  // auto-adapts to dark/light menu bar
+            statusItem.button?.image = icon
+        } else {
+            statusItem.button?.title = "⚡"
+        }
 
         let menu = NSMenu()
         menu.addItem(withTitle: "Show (⌥Space)", action: #selector(show), keyEquivalent: "")

@@ -21,6 +21,12 @@ else
   echo "⚠ warning: resource bundle not found — prompts.default.json will not load"
 fi
 
+# Copy the .icns to the top-level Contents/Resources so CFBundleIconFile resolves.
+# (It's also inside the SPM bundle but Finder / Dock only look at the top level.)
+if [ -f Sources/coshot/Resources/AppIcon.icns ]; then
+  cp Sources/coshot/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 # Ad-hoc sign so the system can track permissions across rebuilds.
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
