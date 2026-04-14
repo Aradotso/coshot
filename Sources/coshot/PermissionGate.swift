@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import ScreenCaptureKit
 
 /// Handles the Screen Recording + Accessibility TCC flow automatically so the
 /// user never has to hunt through System Settings themselves.
@@ -33,6 +34,18 @@ enum PermissionGate {
 
         if !hasScreenRecording {
             _ = CGRequestScreenCaptureAccess()
+
+            // Touch ScreenCaptureKit once so TCC registers coshot in the
+            // Screen Recording settings list even if the user dismissed
+            // the native dialog without clicking Allow. Without this call,
+            // coshot can be missing from System Settings → Privacy &
+            // Security → Screen Recording, giving nothing to toggle on.
+            Task.detached {
+                _ = try? await SCShareableContent.excludingDesktopWindows(
+                    false, onScreenWindowsOnly: true
+                )
+            }
+
             startSilentPoll(escalateAfter: 8.0)
         }
     }

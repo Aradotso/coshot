@@ -11,11 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         overlay = OverlayController()
 
+        installMainMenu()
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
            let icon = NSImage(contentsOf: url) {
             icon.size = NSSize(width: 18, height: 18)
-            icon.isTemplate = true  // auto-adapts to dark/light menu bar
+            // NOT a template — the Ara logo has color that we want to keep,
+            // matching the Dock / app icon exactly.
+            icon.isTemplate = false
             statusItem.button?.image = icon
         } else {
             statusItem.button?.title = "⚡"
@@ -77,5 +81,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Ensure the file exists on disk so the user can edit it.
         _ = PromptLibrary.load()
         NSWorkspace.shared.open(url)
+    }
+
+    /// Click on the Dock icon → toggle the overlay (instead of the default
+    /// "un-minimize windows" behaviour, which does nothing because coshot
+    /// has no document windows).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        overlay.toggle()
+        return false
+    }
+
+    /// .regular apps must provide a main menu or macOS crashes on launch.
+    /// Minimal app menu with Quit + the standard Services/Hide entries.
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+
+        let appMenu = NSMenu(title: "coshot")
+        appMenu.addItem(withTitle: "About coshot",
+                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Check for Updates…",
+                        action: #selector(checkForUpdates),
+                        keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Hide coshot",
+                        action: #selector(NSApplication.hide(_:)),
+                        keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: "Hide Others",
+                                    action: #selector(NSApplication.hideOtherApplications(_:)),
+                                    keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthers)
+        appMenu.addItem(withTitle: "Show All",
+                        action: #selector(NSApplication.unhideAllApplications(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Quit coshot",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+        appItem.submenu = appMenu
+
+        NSApp.mainMenu = mainMenu
     }
 }
