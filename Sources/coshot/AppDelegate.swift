@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkey: HotkeyMonitor!
     private let listenTap = ListenModeTap()
     private var listening = false
-    private var listenTimeoutTask: Task<Void, Never>?
+    // no timeout task — listen mode is sticky, only ⌥Space toggles it off
 
     func applicationDidFinishLaunching(_ n: Notification) {
         overlay = OverlayController()
@@ -86,28 +86,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         listening = true
         updateMenuBarIcon()
-
-        listenTimeoutTask?.cancel()
-        listenTimeoutTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self = self, !Task.isCancelled, self.listening else { return }
-            Log.listen.info("auto-disarm after 10s timeout")
-            self.stopListening()
-        }
+        // Listen mode is sticky — no auto-disarm timer. The user presses
+        // ⌥Space again to turn it off. The green dot stays until they do.
     }
 
     private func stopListening() {
         Log.listen.info("stopListening")
         listening = false
         listenTap.stop()
-        listenTimeoutTask?.cancel()
-        listenTimeoutTask = nil
         updateMenuBarIcon()
     }
 
     private func handleListenedLetter(_ letter: Character) {
-        Log.listen.info("handleListenedLetter \(String(letter), privacy: .public)")
-        stopListening()
+        Log.listen.info("handleListenedLetter \(String(letter), privacy: .public) — firing, keeping listen mode ON")
+        // Don't stopListening — the user wants to stay armed for the next letter.
         overlay.fireListenedPrompt(letter)
     }
 
