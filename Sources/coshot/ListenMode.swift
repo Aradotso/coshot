@@ -1,30 +1,37 @@
 import AppKit
 import CoreGraphics
 
-/// A CGEventTap that, while active, intercepts A/S/D/F/G keydown events
-/// system-wide and fires a callback. Non-letter keys pass through untouched.
+/// A CGEventTap that, while active, intercepts configured keydown events
+/// system-wide and fires a callback. Other keys pass through untouched.
 ///
 /// Requires Accessibility permission — the same one we already need for
 /// `CGEventPost` auto-paste.
 final class ListenModeTap {
-    /// Called with the captured letter, on the main thread.
+    /// Called with the captured key, on the main thread.
     var onLetter: ((Character) -> Void)?
 
-    /// Only these letters are intercepted; everything else passes through.
+    /// Only these keys are intercepted; everything else passes through.
     /// AppDelegate refreshes this from `PromptLibrary.load()` on every
-    /// `start()`, so any letter added to prompts.json works automatically.
-    var validLetters: Set<Character> = []
+    /// `start()`, so any single-char key in prompts.json works automatically.
+    var validKeys: Set<Character> = []
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    /// Full a-z → virtual keycode map (ANSI layout, from Carbon.HIToolbox).
-    private static let letterKeyCodes: [Int64: Character] = [
+    /// Supported key map (ANSI layout, from Carbon.HIToolbox):
+    /// a-z + 0-9 (top row + numeric keypad).
+    private static let triggerKeyCodes: [Int64: Character] = [
          0: "a",  1: "s",  2: "d",  3: "f",  4: "h",  5: "g",
          6: "z",  7: "x",  8: "c",  9: "v", 11: "b", 12: "q",
         13: "w", 14: "e", 15: "r", 16: "y", 17: "t",
         31: "o", 32: "u", 34: "i", 35: "p",
-        37: "l", 38: "j", 40: "k", 45: "n", 46: "m"
+        37: "l", 38: "j", 40: "k", 45: "n", 46: "m",
+
+        18: "1", 19: "2", 20: "3", 21: "4", 23: "5",
+        22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
+
+        83: "1", 84: "2", 85: "3", 86: "4", 87: "5",
+        88: "6", 89: "7", 91: "8", 92: "9", 82: "0"
     ]
 
     var isActive: Bool { tap != nil }
@@ -66,7 +73,7 @@ final class ListenModeTap {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: machPort, enable: true)
 
-        Log.listen.info("tap ACTIVE, listening for A/S/D/F/G")
+        Log.listen.info("tap ACTIVE, listening for configured keys")
     }
 
     func stop() {
@@ -97,22 +104,22 @@ final class ListenModeTap {
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
 
-        guard let letter = Self.letterKeyCodes[keyCode] else {
+        guard let key = Self.triggerKeyCodes[keyCode] else {
             return Unmanaged.passUnretained(event)
         }
 
-        // Only swallow letters that are actually bound to a prompt. Other
-        // letters pass through so the user can still type normal words
+        // Only swallow keys that are actually bound to a prompt. Other
+        // keys pass through so the user can still type normally
         // into the target app (sticky listen mode means the tap stays up
         // between fires).
-        guard validLetters.contains(letter) else {
+        guard validKeys.contains(key) else {
             return Unmanaged.passUnretained(event)
         }
 
-        Log.listen.info("MATCHED letter=\(String(letter), privacy: .public) keyCode=\(keyCode, privacy: .public)")
+        Log.listen.info("MATCHED key=\(String(key), privacy: .public) keyCode=\(keyCode, privacy: .public)")
 
         DispatchQueue.main.async { [weak self] in
-            self?.onLetter?(letter)
+            self?.onLetter?(key)
         }
         return nil  // consume
     }

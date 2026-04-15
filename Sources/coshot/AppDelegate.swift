@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkey: HotkeyMonitor!
     private let listenTap = ListenModeTap()
     private var listening = false
+    private var hasPromptedAccessibilityThisSession = false
     // no timeout task — listen mode is sticky, only ⌥Space toggles it off
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -33,7 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
 
         // ⌥Space arms listen mode — DOES NOT open the overlay. The next
-        // A/S/D/F/G is captured by the CGEventTap and runs end-to-end.
+        // configured prompt key (letters/digits) is captured by the
+        // CGEventTap and runs end-to-end.
         listenTap.onLetter = { [weak self] letter in
             self?.handleListenedLetter(letter)
         }
@@ -67,18 +69,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and bail instead of lighting the green dot misleadingly.
         if !PermissionGate.hasAccessibility {
             Log.listen.error("Accessibility not granted, cannot start listen mode")
-            _ = AXIsProcessTrustedWithOptions([
-                "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
-            ] as CFDictionary)
-            let alert = NSAlert()
-            alert.messageText = "coshot needs Accessibility"
-            alert.informativeText = "Enable coshot in System Settings -> Privacy & Security -> Accessibility so listen mode can capture A/S/D/F/G keys."
-            alert.addButton(withTitle: "Open Settings")
-            alert.addButton(withTitle: "Cancel")
-            NSApp.activate(ignoringOtherApps: true)
-            if alert.runModal() == .alertFirstButtonReturn {
-                let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-                NSWorkspace.shared.open(url)
+            if !hasPromptedAccessibilityThisSession {
+                hasPromptedAccessibilityThisSession = true
+                _ = AXIsProcessTrustedWithOptions([
+                    "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
+                ] as CFDictionary)
+                let alert = NSAlert()
+                alert.messageText = "coshot needs Accessibility"
+                alert.informativeText = "Enable coshot in System Settings -> Privacy & Security -> Accessibility so listen mode can capture your configured prompt keys."
+                alert.addButton(withTitle: "Open Settings")
+                alert.addButton(withTitle: "Cancel")
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn {
+                    let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+                    NSWorkspace.shared.open(url)
+                }
+            } else {
+                Log.listen.info("suppressing repeated Accessibility prompt for this session")
             }
             // Fallback so ⌥Space still does something useful without AX:
             // open config mode where prompts can be clicked/edited.
@@ -86,11 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Refresh bound-letter set from disk each time so edits to prompts.json
+        // Refresh bound-key set from disk each time so edits to prompts.json
         // propagate without needing to relaunch coshot.
         let prompts = PromptLibrary.load().prompts
-        listenTap.validLetters = Set(prompts.compactMap { $0.key.lowercased().first })
-        Log.listen.info("validLetters=\(self.listenTap.validLetters.map(String.init).sorted().joined(separator: ","), privacy: .public)")
+        listenTap.validKeys = Set(prompts.compactMap { $0.key.lowercased().first })
+        Log.listen.info("validKeys=\(self.listenTap.validKeys.map(String.init).sorted().joined(separator: ","), privacy: .public)")
 
         listenTap.start()
         Log.listen.info("after tap.start() isActive=\(self.listenTap.isActive, privacy: .public)")

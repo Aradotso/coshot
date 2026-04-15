@@ -16,6 +16,8 @@ final class OverlayController {
     private var streamTask: Task<Void, Never>?
     private var keyMonitor: Any?
     private var configPollTask: Task<Void, Never>?
+    private var hasPromptedScreenRecordingThisSession = false
+    private var hasPromptedAccessibilityThisSession = false
 
     // MARK: - Public API
 
@@ -27,7 +29,7 @@ final class OverlayController {
     }
 
     /// Fire a prompt without opening the overlay. This is the ⌥Space
-    /// listen-mode path: AppDelegate intercepts the letter via CGEventTap
+    /// listen-mode path: AppDelegate intercepts the key via CGEventTap
     /// and calls here. We run capture → LLM → paste entirely in the
     /// background; the user's cursor is still in their target app so
     /// CGEventPost ⌘V lands there.
@@ -129,7 +131,7 @@ final class OverlayController {
                     self.state.ocrText = text
                     self.state.status = text.isEmpty
                         ? "No text detected on screen"
-                        : "Press A · S · D · F · G"
+                        : "Press any configured prompt key"
                 } catch {
                     let msg = error.localizedDescription.lowercased()
                     let tccFailure = msg.contains("declined")
@@ -175,15 +177,21 @@ final class OverlayController {
 
     private func requestMissingPermissions() {
         if !PermissionGate.hasScreenRecording {
-            _ = CGRequestScreenCaptureAccess()
-            Task.detached {
-                _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            if !hasPromptedScreenRecordingThisSession {
+                hasPromptedScreenRecordingThisSession = true
+                _ = CGRequestScreenCaptureAccess()
+                Task.detached {
+                    _ = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+                }
             }
         }
         if !PermissionGate.hasAccessibility {
-            _ = AXIsProcessTrustedWithOptions([
-                "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
-            ] as CFDictionary)
+            if !hasPromptedAccessibilityThisSession {
+                hasPromptedAccessibilityThisSession = true
+                _ = AXIsProcessTrustedWithOptions([
+                    "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
+                ] as CFDictionary)
+            }
         }
     }
 
@@ -306,7 +314,7 @@ final class OverlayController {
     // MARK: - Prompt execution
 
     /// Called from a mouse click on a BigKey tile. Same effect as typing
-    /// the prompt's letter in config mode — captures (already done on show),
+    /// the prompt's key in config mode — captures (already done on show),
     /// runs the LLM, copies to clipboard, pastes into the frontmost app.
     private func runPromptAt(_ index: Int) {
         guard index < state.prompts.count else { return }

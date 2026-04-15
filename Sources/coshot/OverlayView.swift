@@ -204,7 +204,7 @@ struct OverlayView: View {
             } else if !state.output.isEmpty {
                 Text("pasting…")
             } else {
-                Text("click a letter to run · double-click to edit · ⌥space to dismiss")
+                Text("click a key to run · double-click to edit · ⌥space to dismiss")
             }
             Spacer()
         }
