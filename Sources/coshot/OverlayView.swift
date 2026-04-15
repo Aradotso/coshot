@@ -85,7 +85,7 @@ struct OverlayView: View {
 
     @ViewBuilder
     private var banner: some View {
-        if let url = Bundle.module.url(forResource: "AraArt", withExtension: "png"),
+        if let url = AppResources.url(forResource: "AraArt", withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
             ZStack(alignment: .bottomLeading) {
                 Image(nsImage: nsImage)

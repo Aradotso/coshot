@@ -25,7 +25,7 @@ struct PromptLibrary: Codable {
            let lib = try? JSONDecoder().decode(PromptLibrary.self, from: data) {
             return lib
         }
-        if let bundled = Bundle.module.url(forResource: "prompts.default", withExtension: "json"),
+        if let bundled = AppResources.url(forResource: "prompts.default", withExtension: "json"),
            let data = try? Data(contentsOf: bundled),
            let lib = try? JSONDecoder().decode(PromptLibrary.self, from: data) {
             try? data.write(to: url)

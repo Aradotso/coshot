@@ -7,7 +7,7 @@ enum MenuBarIcon {
     static var base: NSImage?
 
     static func load() {
-        guard let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+        guard let url = AppResources.url(forResource: "MenuBarIcon", withExtension: "png"),
               let img = NSImage(contentsOf: url) else {
             NSLog("coshot: failed to load MenuBarIcon.png from bundle")
             return
