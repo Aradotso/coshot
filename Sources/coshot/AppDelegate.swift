@@ -70,8 +70,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = AXIsProcessTrustedWithOptions([
                 "AXTrustedCheckOptionPrompt" as CFString: kCFBooleanTrue
             ] as CFDictionary)
-            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-            NSWorkspace.shared.open(url)
+            let alert = NSAlert()
+            alert.messageText = "coshot needs Accessibility"
+            alert.informativeText = "Enable coshot in System Settings -> Privacy & Security -> Accessibility so listen mode can capture A/S/D/F/G keys."
+            alert.addButton(withTitle: "Open Settings")
+            alert.addButton(withTitle: "Cancel")
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn {
+                let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+                NSWorkspace.shared.open(url)
+            }
             return
         }
 
