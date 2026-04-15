@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
                 NSWorkspace.shared.open(url)
             }
+            // Fallback so ⌥Space still does something useful without AX:
+            // open config mode where prompts can be clicked/edited.
+            overlay.showConfig()
             return
         }
 
