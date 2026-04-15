@@ -10,6 +10,7 @@ final class OverlayState {
     var prompts: [Prompt] = []
     var isStreaming: Bool = false
     var editingPromptIndex: Int? = nil
+    var capturingShortcutForPromptIndex: Int? = nil
     var isConfigMode: Bool = false
 
     /// Live permission status, refreshed by OverlayController while the

@@ -5,6 +5,7 @@ struct OverlayView: View {
     @Bindable var state: OverlayState
     let onRunPrompt: (Int) -> Void
     let onEditPrompt: (Int) -> Void
+    let onStartShortcutCapture: (Int) -> Void
     let onSaveEdit: (Int) -> Void
     let onCancelEdit: () -> Void
     let onFixScreenRecording: () -> Void
@@ -28,11 +29,8 @@ struct OverlayView: View {
                 if let idx = state.editingPromptIndex, idx < state.prompts.count {
                     PromptEditorView(
                         prompt: $state.prompts[idx],
-                        reservedKeys: Set(
-                            state.prompts.enumerated().compactMap { offset, prompt in
-                                offset == idx ? nil : prompt.key.lowercased()
-                            }
-                        ),
+                        isCapturingShortcut: state.capturingShortcutForPromptIndex == idx,
+                        onStartShortcutCapture: { onStartShortcutCapture(idx) },
                         onSave: { onSaveEdit(idx) },
                         onCancel: { onCancelEdit() }
                     )
@@ -209,7 +207,7 @@ struct OverlayView: View {
             } else if !state.output.isEmpty {
                 Text("pasting…")
             } else {
-                Text("click a key to run · double-click to edit · ⌥space to dismiss")
+                Text("click a key to run · double-click to edit · ⌃space to dismiss")
             }
             Spacer()
         }
@@ -223,12 +221,12 @@ struct OverlayView: View {
 
 struct PromptEditorView: View {
     @Binding var prompt: Prompt
-    let reservedKeys: Set<String>
+    let isCapturingShortcut: Bool
+    let onStartShortcutCapture: () -> Void
     let onSave: () -> Void
     let onCancel: () -> Void
 
     @FocusState private var editorFocused: Bool
-    private let keyGridColumns = Array(repeating: GridItem(.fixed(30), spacing: 6), count: 12)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -265,43 +263,33 @@ struct PromptEditorView: View {
             }
             .frame(minHeight: 200)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text("SHORTCUT KEY")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.4))
-                    Text("choose one unique key")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
+            HStack(alignment: .center, spacing: 10) {
+                Text("shortcut: \(prompt.key.uppercased())")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .foregroundStyle(.white.opacity(0.9))
+                    .background(
+                        RoundedRectangle(cornerRadius: OverlayView.r)
+                            .fill(.white.opacity(0.08))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: OverlayView.r)
+                                    .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                            )
+                    )
 
-                LazyVGrid(columns: keyGridColumns, alignment: .leading, spacing: 6) {
-                    ForEach(ListenModeTap.keyPickerOrder, id: \.self) { key in
-                        let keyString = String(key)
-                        let isSelected = prompt.key.lowercased() == keyString
-                        let isReserved = reservedKeys.contains(keyString) && !isSelected
-
-                        Button {
-                            prompt.key = keyString
-                        } label: {
-                            Text(keyString.uppercased())
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .frame(width: 30, height: 24)
-                                .foregroundStyle(isSelected ? .black : .white.opacity(isReserved ? 0.35 : 0.9))
-                                .background(
-                                    RoundedRectangle(cornerRadius: OverlayView.r)
-                                        .fill(isSelected ? .white : .white.opacity(isReserved ? 0.05 : 0.12))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: OverlayView.r)
-                                        .strokeBorder(isSelected ? .white : .white.opacity(0.14), lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isReserved)
-                        .help(isReserved ? "already used by another prompt" : "set shortcut key")
-                    }
+                Button("hardcoded keys") {
+                    onStartShortcutCapture()
                 }
+                .buttonStyle(PrimaryButtonStyle())
+
+                Spacer()
+            }
+            .overlay(alignment: .bottomLeading) {
+                Text("shortcuts are fixed: ⌃space + ⌃⇧5/6/7/8/9/0")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(.top, 36)
             }
 
             HStack(alignment: .center, spacing: 10) {
@@ -360,7 +348,7 @@ struct PermissionsPanel: View {
                 )
                 PermissionRow(
                     name: "accessibility",
-                    subtitle: "⌥space listen mode and auto-paste",
+                    subtitle: "⌃space listen mode and auto-paste",
                     granted: hasAccessibility,
                     onFix: onFixAccessibility
                 )

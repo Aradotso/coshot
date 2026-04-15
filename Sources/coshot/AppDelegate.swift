@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let listenTap = ListenModeTap()
     private var listening = false
     private var hasPromptedAccessibilityThisSession = false
-    // no timeout task — listen mode is sticky, only ⌥Space toggles it off
+    // no timeout task — listen mode is sticky, only ⌃Space toggles it off
 
     func applicationDidFinishLaunching(_ n: Notification) {
         overlay = OverlayController()
@@ -33,19 +33,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Quit coshot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
 
-        // ⌥Space arms listen mode — DOES NOT open the overlay. The next
-        // configured prompt key (letters/digits) is captured by the
+        // ⌃Space arms listen mode — DOES NOT open the overlay. The next
+        // hardcoded trigger key is captured by the
         // CGEventTap and runs end-to-end.
         listenTap.onLetter = { [weak self] letter in
             self?.handleListenedLetter(letter)
         }
+        listenTap.requiredModifierFlags = [.maskControl, .maskShift]
         hotkey = HotkeyMonitor { [weak self] in self?.toggleListenMode() }
-        hotkey.register(keyCode: UInt32(kVK_Space), modifiers: [.option])
+        hotkey.register(keyCode: UInt32(kVK_Space), modifiers: [.control])
 
         UpdateChecker.shared.startPolling()
 
         // Log initial permission state so we can debug even without any
-        // ⌥Space press.
+        // ⌃Space press.
         Log.app.info("launch v\(self.versionString, privacy: .public) ax=\(PermissionGate.hasAccessibility, privacy: .public) sc=\(PermissionGate.hasScreenRecording, privacy: .public) key=\(PermissionGate.hasApiKey, privacy: .public)")
 
         Task { @MainActor in
@@ -57,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Listen mode
 
     private func toggleListenMode() {
-        Log.listen.info("⌥Space pressed, currently listening=\(self.listening, privacy: .public)")
+        Log.listen.info("⌃Space pressed, currently listening=\(self.listening, privacy: .public)")
         if listening { stopListening() } else { startListening() }
     }
 
@@ -76,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ] as CFDictionary)
                 let alert = NSAlert()
                 alert.messageText = "coshot needs Accessibility"
-                alert.informativeText = "Enable coshot in System Settings -> Privacy & Security -> Accessibility so listen mode can capture your configured prompt keys."
+                alert.informativeText = "Enable coshot in System Settings -> Privacy & Security -> Accessibility so listen mode can capture ⌃Space + ⌃⇧5/6/7/8/9/0."
                 alert.addButton(withTitle: "Open Settings")
                 alert.addButton(withTitle: "Cancel")
                 NSApp.activate(ignoringOtherApps: true)
@@ -87,16 +88,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 Log.listen.info("suppressing repeated Accessibility prompt for this session")
             }
-            // Fallback so ⌥Space still does something useful without AX:
+            // Fallback so ⌃Space still does something useful without AX:
             // open config mode where prompts can be clicked/edited.
             overlay.showConfig()
             return
         }
 
-        // Refresh bound-key set from disk each time so edits to prompts.json
-        // propagate without needing to relaunch coshot.
-        let prompts = PromptLibrary.load().prompts
-        listenTap.validKeys = Set(prompts.compactMap { $0.key.lowercased().first })
+        listenTap.validKeys = Set(OverlayController.hardcodedTriggerKeys)
         Log.listen.info("validKeys=\(self.listenTap.validKeys.map(String.init).sorted().joined(separator: ","), privacy: .public)")
 
         listenTap.start()
@@ -111,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         listening = true
         updateMenuBarIcon()
         // Listen mode is sticky — no auto-disarm timer. The user presses
-        // ⌥Space again to turn it off. The green dot stays until they do.
+        // ⌃Space again to turn it off. The green dot stays until they do.
     }
 
     private func stopListening() {
@@ -159,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Click on the Dock icon → open the overlay in config mode (the only
-    /// place the overlay is shown now; ⌥Space is for listen mode).
+    /// place the overlay is shown now; ⌃Space is for listen mode).
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         overlay.showConfig()
         return false

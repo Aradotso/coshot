@@ -11,6 +11,8 @@ final class KeyablePanel: NSPanel {
 
 @MainActor
 final class OverlayController {
+    static let hardcodedTriggerKeys: [Character] = ["5", "6", "7", "8", "9", "0"]
+
     private var panel: KeyablePanel?
     private let state = OverlayState()
     private var streamTask: Task<Void, Never>?
@@ -33,15 +35,16 @@ final class OverlayController {
     /// and calls here. We run capture → LLM → paste entirely in the
     /// background; the user's cursor is still in their target app so
     /// CGEventPost ⌘V lands there.
-    func fireListenedPrompt(_ letter: Character) {
-        Log.fire.info("fireListenedPrompt letter=\(String(letter), privacy: .public)")
+    func fireListenedPrompt(_ key: Character) {
+        Log.fire.info("fireListenedPrompt key=\(String(key), privacy: .public)")
 
-        let lib = PromptLibrary.load()
-        let key = String(letter).lowercased()
-        guard let prompt = lib.prompts.first(where: { $0.key.lowercased() == key }) else {
-            Log.fire.error("no prompt mapped to letter=\(String(letter), privacy: .public) — prompts.json has \(lib.prompts.count) entries")
+        let prompts = Self.promptsWithHardcodedKeys(PromptLibrary.load().prompts)
+        guard let keyIndex = Self.hardcodedTriggerKeys.firstIndex(of: key),
+              keyIndex < prompts.count else {
+            Log.fire.error("no hardcoded prompt mapped to key=\(String(key), privacy: .public)")
             return
         }
+        let prompt = prompts[keyIndex]
         Log.fire.info("matched prompt name=\(prompt.name, privacy: .public) template_len=\(prompt.template.count, privacy: .public)")
 
         streamTask?.cancel()
@@ -106,7 +109,7 @@ final class OverlayController {
         }
 
         // Refresh state each show so disk edits are picked up.
-        state.prompts = PromptLibrary.load().prompts
+        state.prompts = Self.promptsWithHardcodedKeys(PromptLibrary.load().prompts)
         state.output = ""
         state.ocrText = nil
         state.lastKey = ""
@@ -152,6 +155,7 @@ final class OverlayController {
         streamTask?.cancel()
         configPollTask?.cancel()
         configPollTask = nil
+        state.capturingShortcutForPromptIndex = nil
         panel?.orderOut(nil)
     }
 
@@ -254,6 +258,7 @@ final class OverlayController {
             state: state,
             onRunPrompt:  { [weak self] index in self?.runPromptAt(index) },
             onEditPrompt: { [weak self] index in self?.startEdit(at: index) },
+            onStartShortcutCapture: { [weak self] index in self?.startShortcutCapture(at: index) },
             onSaveEdit:   { [weak self] index in self?.saveEdit(at: index) },
             onCancelEdit: { [weak self] in self?.cancelEdit() },
             onFixScreenRecording: { [weak self] in self?.fixScreenRecording() },
@@ -290,6 +295,26 @@ final class OverlayController {
 
         // While editing a prompt, let all keys reach the TextEditor.
         if state.editingPromptIndex != nil {
+            if let idx = state.editingPromptIndex,
+               state.capturingShortcutForPromptIndex == idx {
+                if let key = ListenModeTap.keyForKeyCode(Int64(event.keyCode)) {
+                    let keyString = String(key)
+                    if state.prompts.enumerated().contains(where: {
+                        $0.offset != idx && $0.element.key.lowercased() == keyString
+                    }) {
+                        state.status = "Key \(keyString.uppercased()) already in use"
+                    } else {
+                        state.prompts[idx].key = keyString
+                        state.capturingShortcutForPromptIndex = nil
+                        state.status = "Shortcut set to \(keyString.uppercased()) — ⌘S saves"
+                    }
+                    return nil
+                } else {
+                    state.status = "Unsupported key — try letters, numbers, punctuation"
+                    return nil
+                }
+            }
+
             // ⌘S saves.
             if event.keyCode == 1 && event.modifierFlags.contains(.command),
                let idx = state.editingPromptIndex {
@@ -369,12 +394,18 @@ final class OverlayController {
     private func startEdit(at index: Int) {
         guard index < state.prompts.count else { return }
         state.editingPromptIndex = index
+        state.capturingShortcutForPromptIndex = nil
         state.status = "Editing — ⌘S saves, Esc cancels"
+    }
+
+    private func startShortcutCapture(at index: Int) {
+        guard state.editingPromptIndex == index else { return }
+        state.status = "Shortcuts are fixed to ⌃Space + ⌃⇧5/6/7/8/9/0"
     }
 
     private func saveEdit(at index: Int) {
         guard index < state.prompts.count else { return }
-        var normalizedPrompts = state.prompts
+        var normalizedPrompts = Self.promptsWithHardcodedKeys(state.prompts)
 
         for i in normalizedPrompts.indices {
             guard let normalized = Self.normalizedShortcutKey(normalizedPrompts[i].key) else {
@@ -397,6 +428,7 @@ final class OverlayController {
             try PromptLibrary.save(normalizedPrompts)
             state.prompts = normalizedPrompts
             state.editingPromptIndex = nil
+            state.capturingShortcutForPromptIndex = nil
             state.status = state.isConfigMode ? "Saved" : "Saved — ready"
         } catch {
             state.status = "Save failed: \(error.localizedDescription)"
@@ -405,9 +437,18 @@ final class OverlayController {
 
     private func cancelEdit() {
         // Reload from disk to discard unsaved changes.
-        state.prompts = PromptLibrary.load().prompts
+        state.prompts = Self.promptsWithHardcodedKeys(PromptLibrary.load().prompts)
         state.editingPromptIndex = nil
+        state.capturingShortcutForPromptIndex = nil
         state.status = state.isConfigMode ? "Configure" : "Ready"
+    }
+
+    private static func promptsWithHardcodedKeys(_ prompts: [Prompt]) -> [Prompt] {
+        var out = prompts
+        for i in 0..<min(out.count, hardcodedTriggerKeys.count) {
+            out[i].key = String(hardcodedTriggerKeys[i])
+        }
+        return out
     }
 
     private static func normalizedShortcutKey(_ raw: String) -> String? {

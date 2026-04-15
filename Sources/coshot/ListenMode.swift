@@ -14,9 +14,13 @@ final class ListenModeTap {
     /// AppDelegate refreshes this from `PromptLibrary.load()` on every
     /// `start()`, so any single-char key in prompts.json works automatically.
     var validKeys: Set<Character> = []
+    var requiredModifierFlags: CGEventFlags = []
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private static let modifierMask: CGEventFlags = [
+        .maskShift, .maskControl, .maskAlternate, .maskCommand
+    ]
 
     /// Supported key map (ANSI layout, from Carbon.HIToolbox):
     /// a-z + 0-9 (top row + numeric keypad) + common punctuation.
@@ -46,6 +50,10 @@ final class ListenModeTap {
     ]
 
     static let supportedKeySet = Set(triggerKeyCodes.values)
+
+    static func keyForKeyCode(_ keyCode: Int64) -> Character? {
+        triggerKeyCodes[keyCode]
+    }
 
     var isActive: Bool { tap != nil }
 
@@ -117,7 +125,7 @@ final class ListenModeTap {
 
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
 
-        guard let key = Self.triggerKeyCodes[keyCode] else {
+        guard let key = Self.keyForKeyCode(keyCode) else {
             return Unmanaged.passUnretained(event)
         }
 
@@ -126,6 +134,11 @@ final class ListenModeTap {
         // into the target app (sticky listen mode means the tap stays up
         // between fires).
         guard validKeys.contains(key) else {
+            return Unmanaged.passUnretained(event)
+        }
+
+        let activeModifiers = event.flags.intersection(Self.modifierMask)
+        if !activeModifiers.isSuperset(of: requiredModifierFlags) {
             return Unmanaged.passUnretained(event)
         }
 
