@@ -374,8 +374,28 @@ final class OverlayController {
 
     private func saveEdit(at index: Int) {
         guard index < state.prompts.count else { return }
+        var normalizedPrompts = state.prompts
+
+        for i in normalizedPrompts.indices {
+            guard let normalized = Self.normalizedShortcutKey(normalizedPrompts[i].key) else {
+                state.status = "Invalid key in \(normalizedPrompts[i].name) — pick from key buttons"
+                return
+            }
+            normalizedPrompts[i].key = normalized
+        }
+
+        var seen = Set<String>()
+        for prompt in normalizedPrompts {
+            if seen.contains(prompt.key) {
+                state.status = "Duplicate key \(prompt.key.uppercased()) — choose unique keys"
+                return
+            }
+            seen.insert(prompt.key)
+        }
+
         do {
-            try PromptLibrary.save(state.prompts)
+            try PromptLibrary.save(normalizedPrompts)
+            state.prompts = normalizedPrompts
             state.editingPromptIndex = nil
             state.status = state.isConfigMode ? "Saved" : "Saved — ready"
         } catch {
@@ -388,5 +408,12 @@ final class OverlayController {
         state.prompts = PromptLibrary.load().prompts
         state.editingPromptIndex = nil
         state.status = state.isConfigMode ? "Configure" : "Ready"
+    }
+
+    private static func normalizedShortcutKey(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let first = trimmed.first else { return nil }
+        guard ListenModeTap.supportedKeySet.contains(first) else { return nil }
+        return String(first)
     }
 }

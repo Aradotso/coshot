@@ -28,6 +28,11 @@ struct OverlayView: View {
                 if let idx = state.editingPromptIndex, idx < state.prompts.count {
                     PromptEditorView(
                         prompt: $state.prompts[idx],
+                        reservedKeys: Set(
+                            state.prompts.enumerated().compactMap { offset, prompt in
+                                offset == idx ? nil : prompt.key.lowercased()
+                            }
+                        ),
                         onSave: { onSaveEdit(idx) },
                         onCancel: { onCancelEdit() }
                     )
@@ -218,10 +223,12 @@ struct OverlayView: View {
 
 struct PromptEditorView: View {
     @Binding var prompt: Prompt
+    let reservedKeys: Set<String>
     let onSave: () -> Void
     let onCancel: () -> Void
 
     @FocusState private var editorFocused: Bool
+    private let keyGridColumns = Array(repeating: GridItem(.fixed(30), spacing: 6), count: 12)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -257,6 +264,45 @@ struct PromptEditorView: View {
                     .padding(14)
             }
             .frame(minHeight: 200)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("SHORTCUT KEY")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.4))
+                    Text("choose one unique key")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+
+                LazyVGrid(columns: keyGridColumns, alignment: .leading, spacing: 6) {
+                    ForEach(ListenModeTap.keyPickerOrder, id: \.self) { key in
+                        let keyString = String(key)
+                        let isSelected = prompt.key.lowercased() == keyString
+                        let isReserved = reservedKeys.contains(keyString) && !isSelected
+
+                        Button {
+                            prompt.key = keyString
+                        } label: {
+                            Text(keyString.uppercased())
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .frame(width: 30, height: 24)
+                                .foregroundStyle(isSelected ? .black : .white.opacity(isReserved ? 0.35 : 0.9))
+                                .background(
+                                    RoundedRectangle(cornerRadius: OverlayView.r)
+                                        .fill(isSelected ? .white : .white.opacity(isReserved ? 0.05 : 0.12))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: OverlayView.r)
+                                        .strokeBorder(isSelected ? .white : .white.opacity(0.14), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isReserved)
+                        .help(isReserved ? "already used by another prompt" : "set shortcut key")
+                    }
+                }
+            }
 
             HStack(alignment: .center, spacing: 10) {
                 TextField("display name", text: $prompt.name)

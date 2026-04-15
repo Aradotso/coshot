@@ -19,7 +19,7 @@ final class ListenModeTap {
     private var runLoopSource: CFRunLoopSource?
 
     /// Supported key map (ANSI layout, from Carbon.HIToolbox):
-    /// a-z + 0-9 (top row + numeric keypad).
+    /// a-z + 0-9 (top row + numeric keypad) + common punctuation.
     private static let triggerKeyCodes: [Int64: Character] = [
          0: "a",  1: "s",  2: "d",  3: "f",  4: "h",  5: "g",
          6: "z",  7: "x",  8: "c",  9: "v", 11: "b", 12: "q",
@@ -31,8 +31,21 @@ final class ListenModeTap {
         22: "6", 26: "7", 28: "8", 25: "9", 29: "0",
 
         83: "1", 84: "2", 85: "3", 86: "4", 87: "5",
-        88: "6", 89: "7", 91: "8", 92: "9", 82: "0"
+        88: "6", 89: "7", 91: "8", 92: "9", 82: "0",
+
+        27: "-", 24: "=", 33: "[", 30: "]", 41: ";",
+        39: "'", 43: ",", 47: ".", 44: "/", 50: "`"
     ]
+
+    /// Canonical key order shown in the in-app key picker UI.
+    static let keyPickerOrder: [Character] = [
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+        "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]",
+        "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'",
+        "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "-", "="
+    ]
+
+    static let supportedKeySet = Set(triggerKeyCodes.values)
 
     var isActive: Bool { tap != nil }
 
